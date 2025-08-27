@@ -5,7 +5,7 @@ This is a starter template for building AI agents using [LangGraph](https://www.
 ## Prerequisites
 
 - Node.js 18+ 
-- Python 3.8+
+- Python 3.12+
 - Any of the following package managers:
   - [pnpm](https://pnpm.io/installation) (recommended)
   - npm
@@ -102,4 +102,16 @@ If you see "I'm having trouble connecting to my tools", make sure:
 If you encounter Python import errors:
 ```bash
 npm install:agent
+```
+
+### Dependency Conflicts
+If you see dependency conflict errors (e.g., with packages like `guardrails-ai`), the agent uses an isolated virtual environment that should resolve most conflicts automatically.
+
+If issues persist, delete and recreate the virtual environment, then reinstall the requirements.txt:
+```bash
+cd agent
+rm -rf .venv
+python -m venv .venv --clear
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -r requirements.txt
 ```
