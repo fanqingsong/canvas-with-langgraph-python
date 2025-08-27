@@ -1,6 +1,6 @@
 "use client";
 
-import { useCoAgent } from "@copilotkit/react-core";
+import { useCoAgent, useCopilotAction } from "@copilotkit/react-core";
 import { CopilotKitCSSProperties, CopilotSidebar } from "@copilotkit/react-ui";
 import { useCallback } from "react";
 import type React from "react";
@@ -46,34 +46,46 @@ interface ProjectInfo {
   description: string;
 }
 
-interface AgentState {
-  project: ProjectInfo;
+interface Project {
+  id: string;
+  name: string;
+  description: string;
   workItem: WorkItem;
 }
 
+interface AgentState {
+  projects: Project[];
+  activeProjectId?: string;
+}
+
+const initialProjectId = "prj_" + Math.random().toString(36).slice(2, 8);
 const initialState: AgentState = {
-  project: {
-    name: "Untitled Project",
-    description:
-      "This is your project description. Summarize the goal and key context here. The agent and you will co-edit fields below.",
-  },
-  workItem: {
-    id: "wi_1234",
-    title: "Draft initial plan",
-    type: "Task",
-    priority: "P2",
-    status: "Not Started",
-    owner: { id: "u_1", name: "Unassigned", avatarUrl: "" },
-    dueDate: "",
-    tags: ["planning"],
-    checklist: [
-      { id: "c1", text: "Define scope", done: false, proposed: false },
-      { id: "c2", text: "List milestones", done: false, proposed: false },
-    ],
-    description:
-      "Write a short overview and proposed steps. The agent can propose edits you can accept or reject.",
-    links: [],
-  },
+  projects: [
+    {
+      id: initialProjectId,
+      name: "Untitled Project",
+      description:
+        "This is your project description. Summarize the goal and key context here. The agent and you will co-edit fields below.",
+      workItem: {
+        id: "wi_1234",
+        title: "Draft initial plan",
+        type: "Task",
+        priority: "P2",
+        status: "Not Started",
+        owner: { id: "u_1", name: "Unassigned", avatarUrl: "" },
+        dueDate: "",
+        tags: ["planning"],
+        checklist: [
+          { id: "c1", text: "Define scope", done: false, proposed: false },
+          { id: "c2", text: "List milestones", done: false, proposed: false },
+        ],
+        description:
+          "Write a short overview and proposed steps. The agent can propose edits you can accept or reject.",
+        links: [],
+      },
+    },
+  ],
+  activeProjectId: initialProjectId,
 };
 
 export default function CopilotKitPage() {
@@ -83,40 +95,53 @@ export default function CopilotKitPage() {
   });
 
   const updateProject = useCallback(
-    (updates: Partial<ProjectInfo>) => {
+    (projectId: string, updates: Partial<Project>) => {
       setState((prev) => {
         const base = prev ?? initialState;
-        return { ...base, project: { ...base.project, ...updates } };
+        const projects: Project[] = base.projects ?? [];
+        const nextProjects = projects.map((p) =>
+          p.id === projectId ? { ...p, ...updates } : p
+        );
+        return { ...base, projects: nextProjects } as AgentState;
       });
     },
     [setState]
   );
 
   const updateWorkItem = useCallback(
-    (updates: Partial<WorkItem>) => {
+    (projectId: string, updates: Partial<WorkItem>) => {
       setState((prev) => {
         const base = prev ?? initialState;
-        return { ...base, workItem: { ...base.workItem, ...updates } };
+        const projects: Project[] = base.projects ?? [];
+        const nextProjects = projects.map((p) =>
+          p.id === projectId ? { ...p, workItem: { ...p.workItem, ...updates } } : p
+        );
+        return { ...base, projects: nextProjects } as AgentState;
       });
     },
     [setState]
   );
 
   const setChecklistItem = useCallback(
-    (id: string, updates: Partial<ChecklistItem>) => {
+    (projectId: string, id: string, updates: Partial<ChecklistItem>) => {
       setState((prev) => {
         const base = prev ?? initialState;
-        const nextChecklist = base.workItem.checklist.map((item) =>
-          item.id === id ? { ...item, ...updates } : item
-        );
-        return { ...base, workItem: { ...base.workItem, checklist: nextChecklist } };
+        const projects: Project[] = base.projects ?? [];
+        const nextProjects = projects.map((p) => {
+          if (p.id !== projectId) return p;
+          const nextChecklist = p.workItem.checklist.map((item) =>
+            item.id === id ? { ...item, ...updates } : item
+          );
+          return { ...p, workItem: { ...p.workItem, checklist: nextChecklist } };
+        });
+        return { ...base, projects: nextProjects } as AgentState;
       });
     },
     [setState]
   );
 
   const addChecklistItem = useCallback(
-    (text: string) => {
+    (projectId: string, text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
       setState((prev) => {
@@ -127,56 +152,175 @@ export default function CopilotKitPage() {
           done: false,
           proposed: false,
         };
-        return {
-          ...base,
-          workItem: { ...base.workItem, checklist: [...base.workItem.checklist, next] },
-        };
+        const nextProjects = (base.projects ?? []).map((p) =>
+          p.id === projectId
+            ? { ...p, workItem: { ...p.workItem, checklist: [...p.workItem.checklist, next] } }
+            : p
+        );
+        return { ...base, projects: nextProjects } as AgentState;
       });
     },
     [setState]
   );
 
   const removeChecklistItem = useCallback(
-    (id: string) => {
+    (projectId: string, id: string) => {
       setState((prev) => {
         const base = prev ?? initialState;
-        return {
-          ...base,
-          workItem: {
-            ...base.workItem,
-            checklist: base.workItem.checklist.filter((i) => i.id !== id),
-          },
-        };
+        const nextProjects = (base.projects ?? []).map((p) =>
+          p.id === projectId
+            ? {
+                ...p,
+                workItem: {
+                  ...p.workItem,
+                  checklist: p.workItem.checklist.filter((i) => i.id !== id),
+                },
+              }
+            : p
+        );
+        return { ...base, projects: nextProjects } as AgentState;
       });
     },
     [setState]
   );
 
   const addTag = useCallback(
-    (tag: string) => {
+    (projectId: string, tag: string) => {
       const next = tag.trim();
       if (!next) return;
       setState((prev) => {
         const base = prev ?? initialState;
-        if (base.workItem.tags.includes(next)) return base;
-        return { ...base, workItem: { ...base.workItem, tags: [...base.workItem.tags, next] } };
+        const nextProjects = (base.projects ?? []).map((p) => {
+          if (p.id !== projectId) return p;
+          if (p.workItem.tags.includes(next)) return p;
+          return { ...p, workItem: { ...p.workItem, tags: [...p.workItem.tags, next] } };
+        });
+        return { ...base, projects: nextProjects } as AgentState;
       });
     },
     [setState]
   );
 
   const removeTag = useCallback(
-    (tag: string) => {
+    (projectId: string, tag: string) => {
       setState((prev) => {
         const base = prev ?? initialState;
-        return {
-          ...base,
-          workItem: { ...base.workItem, tags: base.workItem.tags.filter((t) => t !== tag) },
-        };
+        const nextProjects = (base.projects ?? []).map((p) =>
+          p.id === projectId
+            ? { ...p, workItem: { ...p.workItem, tags: p.workItem.tags.filter((t) => t !== tag) } }
+            : p
+        );
+        return { ...base, projects: nextProjects } as AgentState;
       });
     },
     [setState]
   );
+
+  const addProject = useCallback((name?: string, description?: string) => {
+    const id = "prj_" + Date.now().toString(36);
+    const project: Project = {
+      id,
+      name: name && name.trim() ? name.trim() : "Untitled Project",
+      description:
+        description && description.trim()
+          ? description.trim()
+          : "",
+      workItem: {
+        id: "wi_" + Date.now().toString(36),
+        title: "New work item",
+        type: "Task",
+        priority: "P2",
+        status: "Not Started",
+        owner: { id: "u_1", name: "Unassigned", avatarUrl: "" },
+        dueDate: "",
+        tags: [],
+        checklist: [],
+        description: "",
+        links: [],
+      },
+    };
+    setState((prev) => {
+      const base = prev ?? initialState;
+      const nextProjects = [...(base.projects ?? []), project];
+      return { ...base, projects: nextProjects, activeProjectId: id } as AgentState;
+    });
+    return id;
+  }, [setState]);
+
+  const setActiveProject = useCallback((projectId: string) => {
+    setState((prev) => {
+      const base = prev ?? initialState;
+      return { ...base, activeProjectId: projectId } as AgentState;
+    });
+  }, [setState]);
+
+  // Frontend Actions (exposed as tools to the agent via CopilotKit)
+  useCopilotAction({
+    name: "setProjectName",
+    description: "Set a project's name (defaults to active project).",
+    available: "remote",
+    parameters: [
+      { name: "name", type: "string", required: true, description: "The new project name." },
+      { name: "projectId", type: "string", required: false, description: "Target project id." },
+    ],
+    handler: ({ name, projectId }: { name: string; projectId?: string }) => {
+      const target = projectId ?? state?.activeProjectId ?? initialState.activeProjectId!;
+      updateProject(target, { name });
+    },
+  });
+
+  useCopilotAction({
+    name: "setProjectDescription",
+    description: "Set a project's description (defaults to active project).",
+    available: "remote",
+    parameters: [
+      { name: "description", type: "string", required: true, description: "The new project description." },
+      { name: "projectId", type: "string", required: false, description: "Target project id." },
+    ],
+    handler: ({ description, projectId }: { description: string; projectId?: string }) => {
+      const target = projectId ?? state?.activeProjectId ?? initialState.activeProjectId!;
+      updateProject(target, { description });
+    },
+  });
+
+  useCopilotAction({
+    name: "setWorkItemOwnerName",
+    description: "Update the owner name for a project's work item (defaults to active project).",
+    available: "remote",
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Full name of the owner." },
+      { name: "projectId", type: "string", required: false, description: "Target project id." },
+    ],
+    handler: ({ name, projectId }: { name: string; projectId?: string }) => {
+      const target = projectId ?? state?.activeProjectId ?? initialState.activeProjectId!;
+      const project = (state?.projects ?? initialState.projects).find((p) => p.id === target) ?? initialState.projects[0];
+      const currentOwner: Owner = project.workItem.owner;
+      updateWorkItem(target, { owner: { ...currentOwner, name } });
+    },
+  });
+
+  useCopilotAction({
+    name: "createProject",
+    description: "Create a new project.",
+    available: "remote",
+    parameters: [
+      { name: "name", type: "string", required: false, description: "Optional project name." },
+      { name: "description", type: "string", required: false, description: "Optional project description." },
+    ],
+    handler: ({ name, description }: { name?: string; description?: string }) => {
+      addProject(name, description);
+    },
+  });
+
+  useCopilotAction({
+    name: "setActiveProject",
+    description: "Set the active project by id.",
+    available: "remote",
+    parameters: [{ name: "projectId", type: "string", required: true }],
+    handler: ({ projectId }: { projectId: string }) => {
+      setActiveProject(projectId);
+    },
+  });
 
   return (
     <main
@@ -186,23 +330,51 @@ export default function CopilotKitPage() {
       <Header running={running} />
 
       <section className="mx-auto max-w-6xl px-4 pb-24 pt-6">
-        <ProjectHeader
-          name={state?.project.name ?? initialState.project.name}
-          description={state?.project.description ?? initialState.project.description}
-          onNameChange={(v) => updateProject({ name: v })}
-          onDescriptionChange={(v) => updateProject({ description: v })}
-        />
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-sm text-gray-600">Projects</span>
+          <button
+            onClick={() => addProject()}
+            className="rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50"
+          >
+            New Project
+          </button>
+        </div>
 
-        <div className="mt-6 grid gap-6">
-          <WorkItemCard
-            item={state?.workItem ?? initialState.workItem}
-            onChange={updateWorkItem}
-            onSetChecklistItem={setChecklistItem}
-            onAddChecklistItem={addChecklistItem}
-            onRemoveChecklistItem={removeChecklistItem}
-            onAddTag={addTag}
-            onRemoveTag={removeTag}
-          />
+        <div className="grid gap-6 md:grid-cols-2">
+          {(state?.projects ?? initialState.projects).map((project) => (
+            <div key={project.id} className="rounded-2xl border p-5 shadow-sm">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <span className="text-xs text-gray-500">{project.id}</span>
+                <button
+                  onClick={() => setActiveProject(project.id)}
+                  className={`rounded-md border px-2 py-1 text-xs ${
+                    (state?.activeProjectId ?? initialState.activeProjectId) === project.id ? "bg-blue-50 border-blue-300" : "hover:bg-gray-50"
+                  }`}
+                >
+                  {(state?.activeProjectId ?? initialState.activeProjectId) === project.id ? "Active" : "Make Active"}
+                </button>
+              </div>
+
+              <ProjectHeader
+                name={project.name}
+                description={project.description}
+                onNameChange={(v) => updateProject(project.id, { name: v })}
+                onDescriptionChange={(v) => updateProject(project.id, { description: v })}
+              />
+
+              <div className="mt-6">
+                <WorkItemCard
+                  item={project.workItem}
+                  onChange={(updates) => updateWorkItem(project.id, updates)}
+                  onSetChecklistItem={(id, updates) => setChecklistItem(project.id, id, updates)}
+                  onAddChecklistItem={(text) => addChecklistItem(project.id, text)}
+                  onRemoveChecklistItem={(id) => removeChecklistItem(project.id, id)}
+                  onAddTag={(tag) => addTag(project.id, tag)}
+                  onRemoveTag={(tag) => removeTag(project.id, tag)}
+                />
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
