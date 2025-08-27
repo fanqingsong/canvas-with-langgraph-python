@@ -103,10 +103,9 @@ export default function CopilotKitPage() {
       const projects = s?.projects ?? initialState.projects;
       if (!projects.length) return null;
       return (
-        <div className="text-xs text-violet-600">
-          <div><span className="font-bold">Projects:</span> {projects.length}</div>
-          <div><span className="font-bold">First owner:</span> {projects[0].workItem.owner.name}</div>
-        </div>
+        <pre className="text-xs text-violet-600 font-mono">
+          {JSON.stringify(projects, null, 2)}
+        </pre>
       );
     },
   });
