@@ -3,7 +3,7 @@ This is the main entry point for the agent.
 It defines the workflow graph, state, tools, nodes and edges.
 """
 
-from typing import Any, List
+from typing import Any, List, Optional, Dict
 from typing_extensions import Literal
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, BaseMessage
@@ -23,8 +23,10 @@ class AgentState(MessagesState):
     which will be used to set the language of the agent.
     """
     proverbs: List[str] = []
-    tools: List[Any]
-    # your_custom_agent_state: str = ""
+    tools: List[Any] = []
+    # Shared state fields synchronized with the frontend (AG-UI Canvas)
+    projects: List[Dict[str, Any]] = []
+    activeProjectId: Optional[str] = None
 
 @tool
 def get_weather(location: str):
