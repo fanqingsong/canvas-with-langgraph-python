@@ -13,6 +13,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.types import Command
 from copilotkit import CopilotKitState
 from langgraph.prebuilt import ToolNode
+from langgraph.types import interrupt
 
 class AgentState(CopilotKitState):
     """
@@ -26,7 +27,7 @@ class AgentState(CopilotKitState):
     tools: List[Any] = []
     # Shared state fields synchronized with the frontend (AG-UI Canvas)
     projects: List[Dict[str, Any]] = []
-    activeProjectId: Optional[str] = None
+    # No active project; all actions must specify a project identifier
 def summarize_projects_for_prompt(state: AgentState) -> str:
     try:
         projects = state.get("projects", []) or []
@@ -105,13 +106,25 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "You are a helpful assistant for an AG-UI Canvas.\n"
             "You have shared state synchronized with the UI via CopilotKit CoAgents.\n"
             "Treat the values in the provided state as the single source of truth.\n"
-            "Do not rely on prior assumptions; always read the latest 'projects' and 'activeProjectId' from state.\n"
-            f"Active Project Id: {state.get('activeProjectId', None)}\n"
+            "There is no concept of an active project. For any update, ensure the user specifies which project by id or name.\n"
+            "If the request does not specify a target project, ask a clarifying question before proceeding (HITL).\n"
             f"Projects:\n{projects_summary}\n"
         )
     )
 
     # 4. Run the model to generate a response
+    # If the user asked to modify a project but did not specify which, interrupt to choose
+    try:
+        last_user = next((m for m in reversed(state["messages"]) if getattr(m, "type", "") == "human"), None)
+        if last_user and any(k in last_user.content.lower() for k in ["project", "rename", "owner", "priority", "status"]) and not any(k in last_user.content.lower() for k in ["prj_", "project id", "id="]):
+            choice = interrupt({
+                "type": "choose_project",
+                "content": "Please choose which project you mean.",
+            })
+            state["chosen_project_id"] = choice
+    except Exception:
+        pass
+
     response = await model_with_tools.ainvoke([
         system_message,
         *state["messages"],

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAdditionalInstructions } from "@copilotkit/react-core";
+import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAdditionalInstructions, useLangGraphInterrupt } from "@copilotkit/react-core";
 import { CopilotKitCSSProperties, CopilotSidebar } from "@copilotkit/react-ui";
 import { useCallback, useEffect } from "react";
 import type React from "react";
@@ -55,7 +55,6 @@ interface Project {
 
 interface AgentState {
   projects: Project[];
-  activeProjectId?: string;
 }
 
 const initialProjectId = "prj_" + Math.random().toString(36).slice(2, 8);
@@ -85,11 +84,10 @@ const initialState: AgentState = {
       },
     },
   ],
-  activeProjectId: initialProjectId,
 };
 
 export default function CopilotKitPage() {
-  const { state, setState, running } = useCoAgent<AgentState>({
+  const { state, setState, running, run } = useCoAgent<AgentState>({
     name: "sample_agent",
     initialState,
   });
@@ -102,12 +100,12 @@ export default function CopilotKitPage() {
   useCoAgentStateRender<AgentState>({
     name: "sample_agent",
     render: ({ state: s }) => {
-      const proj = (s?.projects ?? initialState.projects).find((p) => p.id === (s?.activeProjectId ?? initialState.activeProjectId)) ?? (s?.projects ?? initialState.projects)[0];
-      if (!proj) return null;
+      const projects = s?.projects ?? initialState.projects;
+      if (!projects.length) return null;
       return (
         <div className="text-xs text-violet-600">
-          <div><span className="font-bold">Active project:</span> {proj.name}</div>
-          <div><span className="font-bold">Owner:</span> {proj.workItem.owner.name}</div>
+          <div><span className="font-bold">Projects:</span> {projects.length}</div>
+          <div><span className="font-bold">First owner:</span> {projects[0].workItem.owner.name}</div>
         </div>
       );
     },
@@ -116,19 +114,79 @@ export default function CopilotKitPage() {
   // Strengthen grounding: always prefer shared state over chat history
   useCopilotAdditionalInstructions({
     instructions: (() => {
-      const proj = (state?.projects ?? initialState.projects).find((p) => p.id === (state?.activeProjectId ?? initialState.activeProjectId)) ?? (state?.projects ?? initialState.projects)[0];
-      const owner = proj?.workItem?.owner?.name ?? "";
-      const checklistCount = proj?.workItem?.checklist?.length ?? 0;
-      const tags = (proj?.workItem?.tags ?? []).join(", ");
+      const projects = state?.projects ?? initialState.projects;
+      const summary = projects
+        .slice(0, 5)
+        .map((p) => `id=${p.id} • name=${p.name} • owner=${p.workItem.owner.name}`)
+        .join("\n");
       return [
-        "ALWAYS ANSWER FROM SHARED STATE (GROUND TRUTH) — DO NOT RELY ON PRIOR MESSAGES.",
-        `activeProjectId=${state?.activeProjectId ?? initialState.activeProjectId}`,
-        `activeProjectName=${proj?.name ?? ""}`,
-        `ownerName=${owner}`,
-        `checklistItems=${checklistCount}`,
-        `tags=[${tags}]`,
+        "ALWAYS ANSWER FROM SHARED STATE (GROUND TRUTH).",
+        "If a command does not specify which project to change, ask the user to clarify before proceeding.",
+        "Projects (sample):",
+        summary || "(none)",
       ].join("\n");
     })(),
+  });
+
+  // HITL: dropdown selector for project choice using LangGraph interrupt
+  useLangGraphInterrupt({
+    enabled: ({ eventValue }) => {
+      try {
+        return typeof eventValue === "object" && eventValue?.type === "choose_project";
+      } catch {
+        return false;
+      }
+    },
+    render: ({ event, resolve }) => {
+      const projects = state?.projects ?? initialState.projects;
+      if (!projects.length) {
+        return (
+          <div className="rounded-md border bg-white p-4 text-sm shadow">
+            <p>No projects available.</p>
+            <button
+              className="mt-3 rounded border px-3 py-1"
+              onClick={() => resolve("")}
+            >
+              Close
+            </button>
+          </div>
+        );
+      }
+      let selectedId = projects[0].id;
+      return (
+        <div className="rounded-md border bg-white p-4 text-sm shadow">
+          <p className="mb-2 font-medium">Select a project</p>
+          <p className="mb-3 text-xs text-gray-600">{(event?.value as any)?.content ?? "Which project should I use?"}</p>
+          <select
+            className="w-full rounded border px-2 py-1"
+            defaultValue={selectedId}
+            onChange={(e) => {
+              selectedId = e.target.value;
+            }}
+          >
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} ({p.id})
+              </option>
+            ))}
+          </select>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              className="rounded border px-3 py-1"
+              onClick={() => resolve("")}
+            >
+              Cancel
+            </button>
+            <button
+              className="rounded border bg-blue-600 px-3 py-1 text-white"
+              onClick={() => resolve(selectedId)}
+            >
+              Use project
+            </button>
+          </div>
+        </div>
+      );
+    },
   });
 
   const updateProject = useCallback(
@@ -294,45 +352,42 @@ export default function CopilotKitPage() {
   // Frontend Actions (exposed as tools to the agent via CopilotKit)
   useCopilotAction({
     name: "setProjectName",
-    description: "Set a project's name (defaults to active project).",
+    description: "Set a project's name.",
     available: "remote",
     parameters: [
       { name: "name", type: "string", required: true, description: "The new project name." },
-      { name: "projectId", type: "string", required: false, description: "Target project id." },
+      { name: "projectId", type: "string", required: true, description: "Target project id." },
     ],
-    handler: ({ name, projectId }: { name: string; projectId?: string }) => {
-      const target = projectId ?? state?.activeProjectId ?? initialState.activeProjectId!;
-      updateProject(target, { name });
+    handler: ({ name, projectId }: { name: string; projectId: string }) => {
+      updateProject(projectId, { name });
     },
   });
 
   useCopilotAction({
     name: "setProjectDescription",
-    description: "Set a project's description (defaults to active project).",
+    description: "Set a project's description.",
     available: "remote",
     parameters: [
       { name: "description", type: "string", required: true, description: "The new project description." },
-      { name: "projectId", type: "string", required: false, description: "Target project id." },
+      { name: "projectId", type: "string", required: true, description: "Target project id." },
     ],
-    handler: ({ description, projectId }: { description: string; projectId?: string }) => {
-      const target = projectId ?? state?.activeProjectId ?? initialState.activeProjectId!;
-      updateProject(target, { description });
+    handler: ({ description, projectId }: { description: string; projectId: string }) => {
+      updateProject(projectId, { description });
     },
   });
 
   useCopilotAction({
     name: "setWorkItemOwnerName",
-    description: "Update the owner name for a project's work item (defaults to active project).",
+    description: "Update the owner name for a project's work item.",
     available: "remote",
     parameters: [
       { name: "name", type: "string", required: true, description: "Full name of the owner." },
-      { name: "projectId", type: "string", required: false, description: "Target project id." },
+      { name: "projectId", type: "string", required: true, description: "Target project id." },
     ],
-    handler: ({ name, projectId }: { name: string; projectId?: string }) => {
-      const target = projectId ?? state?.activeProjectId ?? initialState.activeProjectId!;
-      const project = (state?.projects ?? initialState.projects).find((p) => p.id === target) ?? initialState.projects[0];
+    handler: ({ name, projectId }: { name: string; projectId: string }) => {
+      const project = (state?.projects ?? initialState.projects).find((p) => p.id === projectId) ?? initialState.projects[0];
       const currentOwner: Owner = project.workItem.owner;
-      updateWorkItem(target, { owner: { ...currentOwner, name } });
+      updateWorkItem(projectId, { owner: { ...currentOwner, name } });
     },
   });
 
@@ -349,15 +404,6 @@ export default function CopilotKitPage() {
     },
   });
 
-  useCopilotAction({
-    name: "setActiveProject",
-    description: "Set the active project by id.",
-    available: "remote",
-    parameters: [{ name: "projectId", type: "string", required: true }],
-    handler: ({ projectId }: { projectId: string }) => {
-      setActiveProject(projectId);
-    },
-  });
 
   return (
     <main
@@ -382,14 +428,6 @@ export default function CopilotKitPage() {
             <div key={project.id} className="rounded-2xl border p-5 shadow-sm">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <span className="text-xs text-gray-500">{project.id}</span>
-                <button
-                  onClick={() => setActiveProject(project.id)}
-                  className={`rounded-md border px-2 py-1 text-xs ${
-                    (state?.activeProjectId ?? initialState.activeProjectId) === project.id ? "bg-blue-50 border-blue-300" : "hover:bg-gray-50"
-                  }`}
-                >
-                  {(state?.activeProjectId ?? initialState.activeProjectId) === project.id ? "Active" : "Make Active"}
-                </button>
               </div>
 
               <ProjectHeader
