@@ -1,8 +1,8 @@
 "use client";
 
-import { useCoAgent, useCopilotAction } from "@copilotkit/react-core";
+import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAdditionalInstructions } from "@copilotkit/react-core";
 import { CopilotKitCSSProperties, CopilotSidebar } from "@copilotkit/react-ui";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import type React from "react";
 
 type WorkItemType = "Task" | "Bug" | "Research";
@@ -63,11 +63,11 @@ const initialState: AgentState = {
   projects: [
     {
       id: initialProjectId,
-      name: "Untitled Project",
+      name: "Example Project",
       description:
         "This is your project description. Summarize the goal and key context here. The agent and you will co-edit fields below.",
       workItem: {
-        id: "wi_1234",
+        id: "WI1234",
         title: "Draft initial plan",
         type: "Task",
         priority: "P2",
@@ -92,6 +92,43 @@ export default function CopilotKitPage() {
   const { state, setState, running } = useCoAgent<AgentState>({
     name: "sample_agent",
     initialState,
+  });
+
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log("[CoAgent state updated]", state);
+  }, [JSON.stringify(state)]);
+
+  useCoAgentStateRender<AgentState>({
+    name: "sample_agent",
+    render: ({ state: s }) => {
+      const proj = (s?.projects ?? initialState.projects).find((p) => p.id === (s?.activeProjectId ?? initialState.activeProjectId)) ?? (s?.projects ?? initialState.projects)[0];
+      if (!proj) return null;
+      return (
+        <div className="text-xs text-violet-600">
+          <div><span className="font-bold">Active project:</span> {proj.name}</div>
+          <div><span className="font-bold">Owner:</span> {proj.workItem.owner.name}</div>
+        </div>
+      );
+    },
+  });
+
+  // Strengthen grounding: always prefer shared state over chat history
+  useCopilotAdditionalInstructions({
+    instructions: (() => {
+      const proj = (state?.projects ?? initialState.projects).find((p) => p.id === (state?.activeProjectId ?? initialState.activeProjectId)) ?? (state?.projects ?? initialState.projects)[0];
+      const owner = proj?.workItem?.owner?.name ?? "";
+      const checklistCount = proj?.workItem?.checklist?.length ?? 0;
+      const tags = (proj?.workItem?.tags ?? []).join(", ");
+      return [
+        "ALWAYS ANSWER FROM SHARED STATE (GROUND TRUTH) — DO NOT RELY ON PRIOR MESSAGES.",
+        `activeProjectId=${state?.activeProjectId ?? initialState.activeProjectId}`,
+        `activeProjectName=${proj?.name ?? ""}`,
+        `ownerName=${owner}`,
+        `checklistItems=${checklistCount}`,
+        `tags=[${tags}]`,
+      ].join("\n");
+    })(),
   });
 
   const updateProject = useCallback(
@@ -358,19 +395,48 @@ export default function CopilotKitPage() {
               <ProjectHeader
                 name={project.name}
                 description={project.description}
-                onNameChange={(v) => updateProject(project.id, { name: v })}
-                onDescriptionChange={(v) => updateProject(project.id, { description: v })}
+                onNameChange={(v) => {
+                  updateProject(project.id, { name: v });
+                }}
+                onDescriptionChange={(v) => {
+                  updateProject(project.id, { description: v });
+                }}
               />
 
               <div className="mt-6">
                 <WorkItemCard
                   item={project.workItem}
-                  onChange={(updates) => updateWorkItem(project.id, updates)}
-                  onSetChecklistItem={(id, updates) => setChecklistItem(project.id, id, updates)}
-                  onAddChecklistItem={(text) => addChecklistItem(project.id, text)}
-                  onRemoveChecklistItem={(id) => removeChecklistItem(project.id, id)}
-                  onAddTag={(tag) => addTag(project.id, tag)}
-                  onRemoveTag={(tag) => removeTag(project.id, tag)}
+                  onChange={(updates) => {
+                    const beforeOwner = project.workItem.owner.name;
+                    updateWorkItem(project.id, updates);
+                  }}
+                  onSetChecklistItem={(id, updates) => {
+                    updateWorkItem(project.id, {
+                      checklist: project.workItem.checklist.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+                    });
+                  }}
+                  onAddChecklistItem={(text) => {
+                    const trimmed = text.trim();
+                    if (!trimmed) return;
+                    updateWorkItem(project.id, {
+                      checklist: [
+                        ...project.workItem.checklist,
+                        { id: `c${Date.now()}`, text: trimmed, done: false, proposed: false },
+                      ],
+                    });
+                  }}
+                  onRemoveChecklistItem={(id) => {
+                    updateWorkItem(project.id, {
+                      checklist: project.workItem.checklist.filter((c) => c.id !== id),
+                    });
+                  }}
+                  onAddTag={(tag) => {
+                    if (project.workItem.tags.includes(tag.trim())) return;
+                    updateWorkItem(project.id, { tags: [...project.workItem.tags, tag.trim()] });
+                  }}
+                  onRemoveTag={(tag) => {
+                    updateWorkItem(project.id, { tags: project.workItem.tags.filter((t) => t !== tag) });
+                  }}
                 />
               </div>
             </div>
@@ -410,19 +476,23 @@ function ProjectHeader(props: {
   description: string;
   onNameChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
+  onNameCommit?: (value: string) => void;
+  onDescriptionCommit?: (value: string) => void;
 }) {
-  const { name, description, onNameChange, onDescriptionChange } = props;
+  const { name, description, onNameChange, onDescriptionChange, onNameCommit, onDescriptionCommit } = props;
   return (
     <div className="rounded-2xl border p-5 shadow-sm">
       <input
         value={name}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => onNameChange(e.target.value)}
+        onBlur={(e: React.FocusEvent<HTMLInputElement>) => onNameCommit?.(e.target.value)}
         placeholder="Project name"
         className="w-full appearance-none text-2xl font-semibold outline-none placeholder:text-gray-400"
       />
       <textarea
         value={description}
         onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onDescriptionChange(e.target.value)}
+        onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => onDescriptionCommit?.(e.target.value)}
         placeholder="Describe the project goals, constraints, and key context."
         className="mt-3 max-h-56 w-full resize-y overflow-auto rounded-lg border bg-white/60 p-3 text-sm leading-6 outline-none placeholder:text-gray-400"
         rows={4}
@@ -439,8 +509,9 @@ function WorkItemCard(props: {
   onRemoveChecklistItem: (id: string) => void;
   onAddTag: (tag: string) => void;
   onRemoveTag: (tag: string) => void;
+  onOwnerCommit?: (newName: string) => void;
 }) {
-  const { item, onChange, onSetChecklistItem, onAddChecklistItem, onRemoveChecklistItem, onAddTag, onRemoveTag } = props;
+  const { item, onChange, onSetChecklistItem, onAddChecklistItem, onRemoveChecklistItem, onAddTag, onRemoveTag, onOwnerCommit } = props;
 
   return (
     <div className="rounded-2xl border p-5 shadow-sm">
@@ -488,6 +559,7 @@ function WorkItemCard(props: {
               onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                 onChange({ owner: { ...item.owner, name: e.target.value } })
               }
+              onBlur={(e: React.FocusEvent<HTMLInputElement>) => onOwnerCommit?.(e.target.value)}
               placeholder="Assignee"
               className="w-full rounded-md border px-2 py-1.5 text-sm outline-none"
             />

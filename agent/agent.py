@@ -11,10 +11,10 @@ from langchain_core.runnables import RunnableConfig
 from langchain.tools import tool
 from langgraph.graph import StateGraph, END
 from langgraph.types import Command
-from langgraph.graph import MessagesState
+from copilotkit import CopilotKitState
 from langgraph.prebuilt import ToolNode
 
-class AgentState(MessagesState):
+class AgentState(CopilotKitState):
     """
     Here we define the state of the agent
 
@@ -27,6 +27,25 @@ class AgentState(MessagesState):
     # Shared state fields synchronized with the frontend (AG-UI Canvas)
     projects: List[Dict[str, Any]] = []
     activeProjectId: Optional[str] = None
+def summarize_projects_for_prompt(state: AgentState) -> str:
+    try:
+        projects = state.get("projects", []) or []
+        active_id = state.get("activeProjectId", None)
+        lines: List[str] = []
+        for p in projects:
+            pid = p.get("id", "")
+            mark = " (active)" if pid == active_id else ""
+            name = p.get("name", "")
+            wi = p.get("workItem", {}) or {}
+            owner = (wi.get("owner", {}) or {}).get("name", "")
+            status = wi.get("status", "")
+            due = wi.get("dueDate", "")
+            tags = ", ".join(wi.get("tags", []) or [])
+            lines.append(f"id={pid}{mark} · name={name} · owner={owner} · status={status} · due={due} · tags=[{tags}]")
+        return "\n".join(lines) if lines else "(no projects)"
+    except Exception:
+        return "(unable to summarize projects)"
+
 
 @tool
 def get_weather(location: str):
@@ -80,8 +99,16 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     )
 
     # 3. Define the system message by which the chat model will be run
+    projects_summary = summarize_projects_for_prompt(state)
     system_message = SystemMessage(
-        content=f"You are a helpful assistant. The current proverbs are {state.get('proverbs', [])}."
+        content=(
+            "You are a helpful assistant for an AG-UI Canvas.\n"
+            "You have shared state synchronized with the UI via CopilotKit CoAgents.\n"
+            "Treat the values in the provided state as the single source of truth.\n"
+            "Do not rely on prior assumptions; always read the latest 'projects' and 'activeProjectId' from state.\n"
+            f"Active Project Id: {state.get('activeProjectId', None)}\n"
+            f"Projects:\n{projects_summary}\n"
+        )
     )
 
     # 4. Run the model to generate a response
@@ -97,6 +124,9 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             goto="tool_node",
             update={
                 "messages": [response],
+                # persist shared state keys so UI edits survive across runs
+                "projects": state.get("projects", []),
+                "activeProjectId": state.get("activeProjectId", None),
             }
         )
 
@@ -105,6 +135,9 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         goto=END,
         update={
             "messages": [response],
+            # persist shared state keys so UI edits survive across runs
+            "projects": state.get("projects", []),
+            "activeProjectId": state.get("activeProjectId", None),
         }
     )
 
