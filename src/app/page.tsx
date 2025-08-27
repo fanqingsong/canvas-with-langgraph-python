@@ -1,171 +1,495 @@
 "use client";
 
-import { useCoAgent, useCopilotAction } from "@copilotkit/react-core";
+import { useCoAgent } from "@copilotkit/react-core";
 import { CopilotKitCSSProperties, CopilotSidebar } from "@copilotkit/react-ui";
-import { useState } from "react";
+import { useCallback } from "react";
+import type React from "react";
+
+type WorkItemType = "Task" | "Bug" | "Research";
+type Priority = "P0" | "P1" | "P2" | "P3";
+type Status = "Not Started" | "In Progress" | "Blocked" | "Done";
+
+interface Owner {
+  id: string;
+  name: string;
+  avatarUrl: string;
+}
+
+interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+  proposed: boolean;
+}
+
+interface LinkItem {
+  title: string;
+  url: string;
+}
+
+interface WorkItem {
+  id: string;
+  title: string;
+  type: WorkItemType;
+  priority: Priority;
+  status: Status;
+  owner: Owner;
+  dueDate: string; // YYYY-MM-DD
+  tags: string[];
+  checklist: ChecklistItem[];
+  description: string;
+  links: LinkItem[];
+}
+
+interface ProjectInfo {
+  name: string;
+  description: string;
+}
+
+interface AgentState {
+  project: ProjectInfo;
+  workItem: WorkItem;
+}
+
+const initialState: AgentState = {
+  project: {
+    name: "Untitled Project",
+    description:
+      "This is your project description. Summarize the goal and key context here. The agent and you will co-edit fields below.",
+  },
+  workItem: {
+    id: "wi_1234",
+    title: "Draft initial plan",
+    type: "Task",
+    priority: "P2",
+    status: "Not Started",
+    owner: { id: "u_1", name: "Unassigned", avatarUrl: "" },
+    dueDate: "",
+    tags: ["planning"],
+    checklist: [
+      { id: "c1", text: "Define scope", done: false, proposed: false },
+      { id: "c2", text: "List milestones", done: false, proposed: false },
+    ],
+    description:
+      "Write a short overview and proposed steps. The agent can propose edits you can accept or reject.",
+    links: [],
+  },
+};
 
 export default function CopilotKitPage() {
-  const [themeColor, setThemeColor] = useState("#6366f1");
-
-  // 🪁 Frontend Actions: https://docs.copilotkit.ai/guides/frontend-actions
-  useCopilotAction({
-    name: "setThemeColor",
-    parameters: [{
-      name: "themeColor",
-      description: "The theme color to set. Make sure to pick nice colors.",
-      required: true, 
-    }],
-    handler({ themeColor }) {
-      setThemeColor(themeColor);
-    },
+  const { state, setState, running } = useCoAgent<AgentState>({
+    name: "sample_agent",
+    initialState,
   });
 
+  const updateProject = useCallback(
+    (updates: Partial<ProjectInfo>) => {
+      setState((prev) => {
+        const base = prev ?? initialState;
+        return { ...base, project: { ...base.project, ...updates } };
+      });
+    },
+    [setState]
+  );
+
+  const updateWorkItem = useCallback(
+    (updates: Partial<WorkItem>) => {
+      setState((prev) => {
+        const base = prev ?? initialState;
+        return { ...base, workItem: { ...base.workItem, ...updates } };
+      });
+    },
+    [setState]
+  );
+
+  const setChecklistItem = useCallback(
+    (id: string, updates: Partial<ChecklistItem>) => {
+      setState((prev) => {
+        const base = prev ?? initialState;
+        const nextChecklist = base.workItem.checklist.map((item) =>
+          item.id === id ? { ...item, ...updates } : item
+        );
+        return { ...base, workItem: { ...base.workItem, checklist: nextChecklist } };
+      });
+    },
+    [setState]
+  );
+
+  const addChecklistItem = useCallback(
+    (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      setState((prev) => {
+        const base = prev ?? initialState;
+        const next: ChecklistItem = {
+          id: `c${Date.now()}`,
+          text: trimmed,
+          done: false,
+          proposed: false,
+        };
+        return {
+          ...base,
+          workItem: { ...base.workItem, checklist: [...base.workItem.checklist, next] },
+        };
+      });
+    },
+    [setState]
+  );
+
+  const removeChecklistItem = useCallback(
+    (id: string) => {
+      setState((prev) => {
+        const base = prev ?? initialState;
+        return {
+          ...base,
+          workItem: {
+            ...base.workItem,
+            checklist: base.workItem.checklist.filter((i) => i.id !== id),
+          },
+        };
+      });
+    },
+    [setState]
+  );
+
+  const addTag = useCallback(
+    (tag: string) => {
+      const next = tag.trim();
+      if (!next) return;
+      setState((prev) => {
+        const base = prev ?? initialState;
+        if (base.workItem.tags.includes(next)) return base;
+        return { ...base, workItem: { ...base.workItem, tags: [...base.workItem.tags, next] } };
+      });
+    },
+    [setState]
+  );
+
+  const removeTag = useCallback(
+    (tag: string) => {
+      setState((prev) => {
+        const base = prev ?? initialState;
+        return {
+          ...base,
+          workItem: { ...base.workItem, tags: base.workItem.tags.filter((t) => t !== tag) },
+        };
+      });
+    },
+    [setState]
+  );
+
   return (
-    <main style={{ "--copilot-kit-primary-color": themeColor } as CopilotKitCSSProperties}>
-      <YourMainContent themeColor={themeColor} />
+    <main
+      style={{ "--copilot-kit-primary-color": "#2563eb" } as CopilotKitCSSProperties}
+      className="min-h-screen"
+    >
+      <Header running={running} />
+
+      <section className="mx-auto max-w-6xl px-4 pb-24 pt-6">
+        <ProjectHeader
+          name={state?.project.name ?? initialState.project.name}
+          description={state?.project.description ?? initialState.project.description}
+          onNameChange={(v) => updateProject({ name: v })}
+          onDescriptionChange={(v) => updateProject({ description: v })}
+        />
+
+        <div className="mt-6 grid gap-6">
+          <WorkItemCard
+            item={state?.workItem ?? initialState.workItem}
+            onChange={updateWorkItem}
+            onSetChecklistItem={setChecklistItem}
+            onAddChecklistItem={addChecklistItem}
+            onRemoveChecklistItem={removeChecklistItem}
+            onAddTag={addTag}
+            onRemoveTag={removeTag}
+          />
+        </div>
+      </section>
+
       <CopilotSidebar
         clickOutsideToClose={false}
         defaultOpen={true}
         labels={{
-          title: "Popup Assistant",
-          initial: "👋 Hi, there! You're chatting with an agent. This agent comes with a few tools to get you started.\n\nFor example you can try:\n- **Frontend Tools**: \"Set the theme to orange\"\n- **Shared State**: \"Write a proverb about AI\"\n- **Generative UI**: \"Get the weather in SF\"\n\nAs you interact with the agent, you'll see the UI update in real-time to reflect the agent's **state**, **tool calls**, and **progress**."
+          title: "Agent",
+          initial:
+            "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
         }}
       />
     </main>
   );
 }
 
-// State of the agent, make sure this aligns with your agent's state.
-type AgentState = {
-  proverbs: string[];
+function Header({ running }: { running: boolean }) {
+  return (
+    <header className="sticky top-0 z-40 w-full border-b bg-white/80 backdrop-blur">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
+        <div className="flex items-center gap-2">
+          <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: running ? "#22c55e" : "#eab308" }} />
+          <span className="text-sm font-medium">AG-UI Canvas</span>
+        </div>
+        <span className="text-xs text-gray-500">sample_agent</span>
+      </div>
+    </header>
+  );
 }
 
-function YourMainContent({ themeColor }: { themeColor: string }) {
-  // 🪁 Shared State: https://docs.copilotkit.ai/coagents/shared-state
-  const { state, setState } = useCoAgent<AgentState>({
-    name: "sample_agent",
-    initialState: {
-      proverbs: [
-        "CopilotKit may be new, but its the best thing since sliced bread.",
-      ],
-    },
-  })
+function ProjectHeader(props: {
+  name: string;
+  description: string;
+  onNameChange: (value: string) => void;
+  onDescriptionChange: (value: string) => void;
+}) {
+  const { name, description, onNameChange, onDescriptionChange } = props;
+  return (
+    <div className="rounded-2xl border p-5 shadow-sm">
+      <input
+        value={name}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => onNameChange(e.target.value)}
+        placeholder="Project name"
+        className="w-full appearance-none text-2xl font-semibold outline-none placeholder:text-gray-400"
+      />
+      <textarea
+        value={description}
+        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onDescriptionChange(e.target.value)}
+        placeholder="Describe the project goals, constraints, and key context."
+        className="mt-3 max-h-56 w-full resize-y overflow-auto rounded-lg border bg-white/60 p-3 text-sm leading-6 outline-none placeholder:text-gray-400"
+        rows={4}
+      />
+    </div>
+  );
+}
 
-  // 🪁 Frontend Actions: https://docs.copilotkit.ai/coagents/frontend-actions
-  useCopilotAction({
-    name: "addProverb",
-    parameters: [{
-      name: "proverb",
-      description: "The proverb to add. Make it witty, short and concise.",
-      required: true,
-    }],
-    handler: ({ proverb }) => {
-      setState({
-        ...state,
-        proverbs: [...(state.proverbs || []), proverb],
-      });
-    },
-  });
-
-  //🪁 Generative UI: https://docs.copilotkit.ai/coagents/generative-ui
-  useCopilotAction({
-    name: "get_weather",
-    description: "Get the weather for a given location.",
-    available: "disabled",
-    parameters: [
-      { name: "location", type: "string", required: true },
-    ],
-    render: ({ args }) => {
-      return <WeatherCard location={args.location} themeColor={themeColor} />
-    },
-  });
+function WorkItemCard(props: {
+  item: WorkItem;
+  onChange: (updates: Partial<WorkItem>) => void;
+  onSetChecklistItem: (id: string, updates: Partial<ChecklistItem>) => void;
+  onAddChecklistItem: (text: string) => void;
+  onRemoveChecklistItem: (id: string) => void;
+  onAddTag: (tag: string) => void;
+  onRemoveTag: (tag: string) => void;
+}) {
+  const { item, onChange, onSetChecklistItem, onAddChecklistItem, onRemoveChecklistItem, onAddTag, onRemoveTag } = props;
 
   return (
-    <div
-      style={{ backgroundColor: themeColor }}
-      className="h-screen w-screen flex justify-center items-center flex-col transition-colors duration-300"
-    >
-      <div className="bg-white/20 backdrop-blur-md p-8 rounded-2xl shadow-xl max-w-2xl w-full">
-        <h1 className="text-4xl font-bold text-white mb-2 text-center">Proverbs</h1>
-        <p className="text-gray-200 text-center italic mb-6">This is a demonstrative page, but it could be anything you want! 🪁</p>
-        <hr className="border-white/20 my-6" />
-        <div className="flex flex-col gap-3">
-          {state.proverbs?.map((proverb, index) => (
-            <div 
-              key={index} 
-              className="bg-white/15 p-4 rounded-xl text-white relative group hover:bg-white/20 transition-all"
-            >
-              <p className="pr-8">{proverb}</p>
-              <button 
-                onClick={() => setState({
-                  ...state,
-                  proverbs: (state.proverbs || []).filter((_, i) => i !== index),
-                })}
-                className="absolute right-3 top-3 opacity-0 group-hover:opacity-100 transition-opacity 
-                  bg-red-500 hover:bg-red-600 text-white rounded-full h-6 w-6 flex items-center justify-center"
-              >
-                ✕
-              </button>
+    <div className="rounded-2xl border p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <input
+          value={item.title}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ title: e.target.value })}
+          placeholder="Work item title"
+          className="w-full appearance-none text-lg font-medium outline-none placeholder:text-gray-400"
+        />
+        <div className="flex items-center gap-2">
+          <Select
+            label="Type"
+            value={item.type}
+            onChange={(v) => onChange({ type: v })}
+            options={["Task", "Bug", "Research"]}
+          />
+          <Select
+            label="Priority"
+            value={item.priority}
+            onChange={(v) => onChange({ priority: v as Priority })}
+            options={["P0", "P1", "P2", "P3"]}
+          />
+          <Select
+            label="Status"
+            value={item.status}
+            onChange={(v) => onChange({ status: v as Status })}
+            options={["Not Started", "In Progress", "Blocked", "Done"]}
+          />
+          <input
+            value={item.dueDate}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ dueDate: e.target.value })}
+            type="date"
+            className="h-9 rounded-md border px-2 text-sm outline-none"
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Owner</label>
+            <input
+              value={item.owner.name}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                onChange({ owner: { ...item.owner, name: e.target.value } })
+              }
+              placeholder="Assignee"
+              className="w-full rounded-md border px-2 py-1.5 text-sm outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Tags</label>
+            <TagEditor tags={item.tags} onAdd={onAddTag} onRemove={onRemoveTag} />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Checklist</label>
+            <div className="space-y-2">
+              {item.checklist.map((c) => (
+                <div key={c.id} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={c.done}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => onSetChecklistItem(c.id, { done: e.target.checked })}
+                    className="h-4 w-4"
+                  />
+                  <input
+                    value={c.text}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => onSetChecklistItem(c.id, { text: e.target.value })}
+                    className="flex-1 rounded-md border px-2 py-1 text-sm outline-none"
+                  />
+                  <button
+                    onClick={() => onRemoveChecklistItem(c.id)}
+                    className="rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <AddChecklistInput onAdd={onAddChecklistItem} />
             </div>
-          ))}
+          </div>
         </div>
-        {state.proverbs?.length === 0 && <p className="text-center text-white/80 italic my-8">
-          No proverbs yet. Ask the assistant to add some!
-        </p>}
+
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Description</label>
+            <textarea
+              value={item.description}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onChange({ description: e.target.value })}
+              placeholder="Write details, context, or paste a brief."
+              className="min-h-40 w-full resize-y rounded-md border bg-white/60 p-3 text-sm leading-6 outline-none"
+              rows={8}
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Related links</label>
+            <LinkList
+              links={item.links}
+              onChange={(next) => onChange({ links: next })}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-// Simple sun icon for the weather card
-function SunIcon() {
+function Select<T extends string>(props: {
+  label: string;
+  value: T;
+  options: readonly T[] | string[];
+  onChange: (value: T) => void;
+}) {
+  const { label, value, options, onChange } = props;
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-14 h-14 text-yellow-200">
-      <circle cx="12" cy="12" r="5" />
-      <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" strokeWidth="2" stroke="currentColor" />
-    </svg>
+    <div className="flex h-9 items-center gap-1 rounded-md border px-2">
+      <span className="text-[11px] text-gray-500">{label}</span>
+      <select
+        value={value}
+        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onChange(e.target.value as T)}
+        className="h-7 appearance-none bg-transparent pl-1 pr-4 text-sm outline-none"
+      >
+        {options.map((opt) => (
+          <option key={String(opt)} value={String(opt)}>
+            {String(opt)}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
-// Weather card component where the location and themeColor are based on what the agent
-// sets via tool calls.
-function WeatherCard({ location, themeColor }: { location?: string, themeColor: string }) {
+function TagEditor(props: { tags: string[]; onAdd: (tag: string) => void; onRemove: (tag: string) => void }) {
+  const { tags, onAdd, onRemove } = props;
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      onAdd((e.target as HTMLInputElement).value);
+      (e.target as HTMLInputElement).value = "";
+    }
+  };
   return (
-    <div
-    style={{ backgroundColor: themeColor }}
-    className="rounded-xl shadow-xl mt-6 mb-4 max-w-md w-full"
-  >
-    <div className="bg-white/20 p-4 w-full">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-xl font-bold text-white capitalize">{location}</h3>
-          <p className="text-white">Current Weather</p>
-        </div>
-        <SunIcon />
-      </div>
-      
-      <div className="mt-4 flex items-end justify-between">
-        <div className="text-3xl font-bold text-white">70°</div>
-        <div className="text-sm text-white">Clear skies</div>
-      </div>
-      
-      <div className="mt-4 pt-4 border-t border-white">
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <div>
-            <p className="text-white text-xs">Humidity</p>
-            <p className="text-white font-medium">45%</p>
-          </div>
-          <div>
-            <p className="text-white text-xs">Wind</p>
-            <p className="text-white font-medium">5 mph</p>
-          </div>
-          <div>
-            <p className="text-white text-xs">Feels Like</p>
-            <p className="text-white font-medium">72°</p>
-          </div>
-        </div>
-      </div>
+    <div className="flex flex-wrap items-center gap-2 rounded-md border p-2">
+      {tags.map((t) => (
+        <span key={t} className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs">
+          {t}
+          <button className="text-gray-500" onClick={() => onRemove(t)} aria-label={`Remove ${t}`}>
+            ×
+          </button>
+        </span>
+      ))}
+      <input
+        onKeyDown={handleKeyDown}
+        placeholder="Add tag and press Enter"
+        className="min-w-32 flex-1 rounded-md px-1 text-sm outline-none"
+      />
     </div>
-  </div>
+  );
+}
+
+function AddChecklistInput(props: { onAdd: (text: string) => void }) {
+  const { onAdd } = props;
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      onAdd((e.target as HTMLInputElement).value);
+      (e.target as HTMLInputElement).value = "";
+    }
+  };
+  return (
+    <input
+      onKeyDown={onKeyDown}
+      placeholder="+ Add item and press Enter"
+      className="w-full rounded-md border px-2 py-1 text-sm outline-none"
+    />
+  );
+}
+
+function LinkList(props: {
+  links: LinkItem[];
+  onChange: (next: LinkItem[]) => void;
+}) {
+  const { links, onChange } = props;
+
+  const add = () => {
+    const title = window.prompt("Link title");
+    const url = window.prompt("Link URL (https://…)");
+    if (!title || !url) return;
+    try {
+      // basic validation
+      // eslint-disable-next-line no-new
+      new URL(url);
+      onChange([...links, { title, url }]);
+    } catch {
+      // ignore invalid URL
+    }
+  };
+
+  const removeAt = (idx: number) => {
+    const next = links.slice(0, idx).concat(links.slice(idx + 1));
+    onChange(next);
+  };
+
+  return (
+    <div className="space-y-2">
+      {links.length === 0 && <p className="text-xs text-gray-500">No links yet.</p>}
+      {links.map((l, i) => (
+        <div key={`${l.title}-${i}`} className="flex items-center justify-between gap-2 rounded-md border p-2">
+          <a href={l.url} target="_blank" rel="noreferrer" className="truncate text-sm text-blue-600 underline">
+            {l.title}
+          </a>
+          <button onClick={() => removeAt(i)} className="rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50">
+            Remove
+          </button>
+        </div>
+      ))}
+      <button onClick={add} className="rounded-md border px-3 py-1 text-xs text-gray-700 hover:bg-gray-50">
+        + Add link
+      </button>
+    </div>
   );
 }

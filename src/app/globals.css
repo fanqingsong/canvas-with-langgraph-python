@@ -22,3 +22,15 @@ body,
 html {
   height: 100%;
 }
+
+/* CopilotKit sidebar width override (thinner sidebar) */
+@media (min-width: 1024px) {
+  .copilotKitSidebar {
+    width: 320px !important;
+    max-width: 320px !important;
+  }
+  .copilotKitSidebar .copilotKitSidebarContentWrapper {
+    width: 320px !important;
+    max-width: 320px !important;
+  }
+}
