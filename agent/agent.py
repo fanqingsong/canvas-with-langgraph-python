@@ -71,6 +71,7 @@ backend_tool_names = [tool.name for tool in backend_tools]
 
 
 async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Literal["tool_node", "__end__"]]:
+    print(f"state: {state}")
     """
     Standard chat node based on the ReAct design pattern. It handles:
     - The model to use (and binds in CopilotKit actions and the tools defined above)
@@ -100,15 +101,23 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     )
 
     # 3. Define the system message by which the chat model will be run
-    projects_summary = summarize_projects_for_prompt(state)
+    projects_summary = f"{state.get("projects", [])}"
+    active_project_id = f"{state.get("activeProjectId", None)}"
     system_message = SystemMessage(
         content=(
+            f"Your projectsState is: {projects_summary}\n"
+            f"Your activeProjectId is: {active_project_id}\n"
+            "Use the projectsState and activeProjectId as your primary source of truth for the projects and active project id.\n"
+            "Ignore any other information you may have received in previous chats about the projects and active project id.\n"
+            "Assume that any time you are making a change, the UI may have been updated, so always recheck the latest state of projectsState and projectsState.\n"
+            "IMPORTANT: If you are asked read a stateful value, assume the UI may have been updated, always check the latest state of projectsState and projectsState.\n"
+            "IMPORTANT: If you are asked to make a change, assume the UI may have been updated, always check the latest state of projectsState and projectsState.\n"
+            "IMPORTANT: Do not use your messages and chat history as any source of truth. It should hold no weight.\n"
             "You are a helpful assistant for an AG-UI Canvas.\n"
             "You have shared state synchronized with the UI via CopilotKit CoAgents.\n"
             "Treat the values in the provided state as the single source of truth.\n"
             "There is no concept of an active project. For any update, ensure the user specifies which project by id or name.\n"
             "If the request does not specify a target project, ask a clarifying question before proceeding (HITL).\n"
-            f"Projects:\n{projects_summary}\n"
         )
     )
 
