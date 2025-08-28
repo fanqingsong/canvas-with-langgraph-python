@@ -536,7 +536,7 @@ export default function CopilotKitPage() {
             ) : (
             <div className="grid gap-6 md:grid-cols-2">
               {(state?.items ?? initialState.items).map((item) => (
-                <div key={item.id} className="rounded-2xl border p-5 shadow-sm">
+                <article key={item.id} className="rounded-2xl border p-5 shadow-sm transition-all ease-out bg-card hover:border-accent/40 focus-within:border-accent/60 last-of-type:mb-6">
                   <ItemHeader
                     name={item.name}
                     subtitle={item.subtitle}
@@ -549,7 +549,7 @@ export default function CopilotKitPage() {
                   <div className="mt-6">
                     <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={(tag) => toggleTag(item.id, tag)} />
                   </div>
-                </div>
+                </article>
               ))}
             </div>
             )}
@@ -616,19 +616,19 @@ function ItemHeader(props: {
 }) {
   const { name, subtitle, description, onNameChange, onSubtitleChange, onDescriptionChange, onNameCommit, onDescriptionCommit } = props;
   return (
-    <div className="rounded-2xl border p-5 shadow-sm">
+    <div className="mb-4">
       <input
         value={name}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => onNameChange(e.target.value)}
         onBlur={(e: React.FocusEvent<HTMLInputElement>) => onNameCommit?.(e.target.value)}
         placeholder="Item title"
-        className="w-full appearance-none text-2xl font-semibold outline-none placeholder:text-gray-400"
+        className="w-full appearance-none text-2xl font-semibold outline-none placeholder:text-gray-400 transition-colors focus:text-accent focus:placeholder:text-accent/65"
       />
       <TextareaAutosize
         value={subtitle}
         onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onSubtitleChange(e.target.value)}
         placeholder="Optional subtitle or short description"
-        className="mt-2 w-full bg-transparent text-sm leading-6 resize-none outline-none placeholder:text-gray-400"
+        className="mt-2 w-full bg-transparent text-sm leading-6 resize-none outline-none placeholder:text-gray-400 transition-colors focus:text-accent focus:placeholder:text-accent/65"
         minRows={1}
       />
     </div>
@@ -645,13 +645,13 @@ function CardRenderer(props: {
   if (item.type === "notes") {
     const d = item.data as NotesData;
     return (
-      <div className="rounded-2xl border p-5 shadow-sm">
+      <div className="mt-4">
         <label className="mb-1 block text-xs font-medium text-gray-500">Field 1 (e.g., Rich Text Content)</label>
         <TextareaAutosize
           value={d.content ?? ""}
           onChange={(e) => onUpdateData(() => ({ content: e.target.value }))}
           placeholder="Write notes or description..."
-          className="min-h-40 w-full resize-none rounded-md border bg-white/60 p-3 text-sm leading-6 outline-none"
+          className="min-h-40 w-full resize-none rounded-md border bg-white/60 p-3 text-sm leading-6 outline-none placeholder:text-gray-400 transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent focus:placeholder:text-accent/65"
           minRows={6}
         />
       </div>
@@ -661,7 +661,7 @@ function CardRenderer(props: {
   if (item.type === "chart") {
     const d = item.data as ChartData;
     return (
-      <div className="rounded-2xl border p-5 shadow-sm">
+      <div className="mt-4">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-sm font-medium">Simple Bar Chart</span>
         </div>
@@ -675,6 +675,7 @@ function CardRenderer(props: {
                   "w-12 rounded-md border px-2 py-1 text-xs outline-none appearance-none [-moz-appearance:textfield]",
                   "[&::-webkit-outer-spin-button]:[-webkit-appearance:none] [&::-webkit-outer-spin-button]:m-0",
                   "[&::-webkit-inner-spin-button]:[-webkit-appearance:none] [&::-webkit-inner-spin-button]:m-0",
+                  "transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent",
                 )}
                 type="number"
                 min={0}
@@ -698,14 +699,14 @@ function CardRenderer(props: {
   const set = (partial: Partial<WorkEntityData>) => onUpdateData((prev) => ({ ...(prev as WorkEntityData), ...partial }));
 
   return (
-    <div className="rounded-2xl border p-5 shadow-sm">
+    <div className="mt-4">
       <div className="grid gap-3 md:grid-cols-2">
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-500">Field 1</label>
           <input
             value={d.field1 ?? ""}
             onChange={(e) => set({ field1: e.target.value })}
-            className="w-full rounded-md border px-2 py-1.5 text-sm outline-none"
+            className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors placeholder:text-gray-400 hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent focus:placeholder:text-accent/65"
             placeholder="Field 1 value"
           />
         </div>
@@ -714,7 +715,7 @@ function CardRenderer(props: {
           <select
             value={d.field2 ?? ""}
             onChange={(e) => set({ field2: e.target.value })}
-            className="w-full rounded-md border px-2 py-1.5 text-sm outline-none"
+            className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent"
           >
             <option value="">Select...</option>
             {(d.field2Options ?? []).map((opt) => (
@@ -728,7 +729,7 @@ function CardRenderer(props: {
             type="date"
             value={d.field3Date ?? ""}
             onChange={(e) => set({ field3Date: e.target.value })}
-            className="w-full rounded-md border px-2 py-1.5 text-sm outline-none"
+            className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent"
           />
         </div>
       </div>
