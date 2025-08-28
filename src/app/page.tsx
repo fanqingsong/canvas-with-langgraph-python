@@ -11,6 +11,8 @@ import { PanelLeftClose, PanelLeftOpen, Users, Plus } from "lucide-react"
 import { Bot } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 
 type WorkItemType = "Task" | "Bug" | "Research";
 type Priority = "P0" | "P1" | "P2" | "P3";
@@ -48,16 +50,37 @@ interface WorkItem {
   links: LinkItem[];
 }
 
-interface ItemInfo {
-  name: string;
-  description: string;
+type CardType = "work" | "entity" | "notes" | "chart";
+
+interface WorkEntityData {
+  field1?: string;
+  field2?: string;
+  field2Options: string[];
+  field3Date?: string; // YYYY-MM-DD
+  tagsAvailable: string[];
+  tags: string[];
 }
+
+interface NotesData {
+  content?: string;
+}
+
+interface ChartMetric {
+  label: string;
+  value: number; // 0..100
+}
+
+interface ChartData {
+  metrics: ChartMetric[];
+}
+
+type ItemData = WorkEntityData | NotesData | ChartData;
 
 interface Item {
   id: string;
-  name: string;
-  description: string;
-  workItem: WorkItem;
+  type: CardType;
+  name: string; // editable title
+  data: ItemData;
 }
 
 interface AgentState {
@@ -115,7 +138,7 @@ export default function CopilotKitPage() {
       const gDesc = state?.globalDescription ?? "";
       const summary = items
         .slice(0, 5)
-        .map((p) => `id=${p.id} • name=${p.name} • owner=${p.workItem.owner.name}`)
+        .map((p: Item) => `id=${p.id} • name=${p.name} • type=${p.type}`)
         .join("\n");
       return [
         "ALWAYS ANSWER FROM SHARED STATE (GROUND TRUTH).",
@@ -189,28 +212,65 @@ export default function CopilotKitPage() {
     },
   });
 
+  // HITL: choose a card type when not specified
+  useLangGraphInterrupt({
+    enabled: ({ eventValue }) => {
+      try {
+        return typeof eventValue === "object" && eventValue?.type === "choose_card_type";
+      } catch {
+        return false;
+      }
+    },
+    render: ({ event, resolve }) => {
+      const options: { id: CardType; label: string }[] = [
+        { id: "work", label: "Work item" },
+        { id: "entity", label: "Entity" },
+        { id: "notes", label: "Notes" },
+        { id: "chart", label: "Chart" },
+      ];
+      let selected: CardType = options[0].id;
+      return (
+        <div className="rounded-md border bg-white p-4 text-sm shadow">
+          <p className="mb-2 font-medium">Select a card type</p>
+          <p className="mb-3 text-xs text-gray-600">{(event?.value as any)?.content ?? "Which type of card should I create?"}</p>
+          <select
+            className="w-full rounded border px-2 py-1"
+            defaultValue={selected}
+            onChange={(e) => {
+              selected = e.target.value as CardType;
+            }}
+          >
+            {options.map((opt) => (
+              <option key={opt.id} value={opt.id}>{opt.label}</option>
+            ))}
+          </select>
+          <div className="mt-3 flex justify-end gap-2">
+            <button className="rounded border px-3 py-1" onClick={() => resolve("")}>Cancel</button>
+            <button className="rounded border bg-blue-600 px-3 py-1 text-white" onClick={() => resolve(selected)}>Use type</button>
+          </div>
+        </div>
+      );
+    },
+  });
+
   const updateItem = useCallback(
     (itemId: string, updates: Partial<Item>) => {
       setState((prev) => {
         const base = prev ?? initialState;
         const items: Item[] = base.items ?? [];
-        const nextItems = items.map((p) =>
-          p.id === itemId ? { ...p, ...updates } : p
-        );
+        const nextItems = items.map((p) => (p.id === itemId ? { ...p, ...updates } : p));
         return { ...base, items: nextItems } as AgentState;
       });
     },
     [setState]
   );
 
-  const updateWorkItem = useCallback(
-    (itemId: string, updates: Partial<WorkItem>) => {
+  const updateItemData = useCallback(
+    (itemId: string, updater: (prev: ItemData) => ItemData) => {
       setState((prev) => {
         const base = prev ?? initialState;
         const items: Item[] = base.items ?? [];
-        const nextItems = items.map((p) =>
-          p.id === itemId ? { ...p, workItem: { ...p.workItem, ...updates } } : p
-        );
+        const nextItems = items.map((p) => (p.id === itemId ? { ...p, data: updater(p.data) } : p));
         return { ...base, items: nextItems } as AgentState;
       });
     },
@@ -219,120 +279,78 @@ export default function CopilotKitPage() {
 
   const setChecklistItem = useCallback(
     (itemId: string, id: string, updates: Partial<ChecklistItem>) => {
-      setState((prev) => {
-        const base = prev ?? initialState;
-        const items: Item[] = base.items ?? [];
-        const nextItems = items.map((p) => {
-          if (p.id !== itemId) return p;
-          const nextChecklist = p.workItem.checklist.map((item) =>
-            item.id === id ? { ...item, ...updates } : item
-          );
-          return { ...p, workItem: { ...p.workItem, checklist: nextChecklist } };
-        });
-        return { ...base, items: nextItems } as AgentState;
+      updateItemData(itemId, (prev) => {
+        const d = prev as WorkEntityData;
+        // no checklist in new schema; keep for compatibility if ever needed
+        return d;
       });
     },
-    [setState]
+    [updateItemData]
   );
 
-  const addChecklistItem = useCallback(
-    (itemId: string, text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-      setState((prev) => {
-        const base = prev ?? initialState;
-        const next: ChecklistItem = {
-          id: `c${Date.now()}`,
-          text: trimmed,
-          done: false,
-          proposed: false,
-        };
-        const nextItems = (base.items ?? []).map((p: Item) =>
-          p.id === itemId
-            ? { ...p, workItem: { ...p.workItem, checklist: [...p.workItem.checklist, next] } }
-            : p
-        );
-        return { ...base, items: nextItems } as AgentState;
-      });
-    },
-    [setState]
-  );
+  const toggleTag = useCallback((itemId: string, tag: string) => {
+    updateItemData(itemId, (prev) => {
+      if ((prev as WorkEntityData).tags !== undefined) {
+        const d = prev as WorkEntityData;
+        const selected = new Set(d.tags ?? []);
+        if (selected.has(tag)) selected.delete(tag); else selected.add(tag);
+        return { ...d, tags: Array.from(selected) };
+      }
+      return prev;
+    });
+  }, [updateItemData]);
 
   const removeChecklistItem = useCallback(
     (itemId: string, id: string) => {
-      setState((prev) => {
-        const base = prev ?? initialState;
-        const nextItems = (base.items ?? []).map((p: Item) =>
-          p.id === itemId
-            ? {
-                ...p,
-                workItem: {
-                  ...p.workItem,
-                  checklist: p.workItem.checklist.filter((i) => i.id !== id),
-                },
-              }
-            : p
-        );
-        return { ...base, items: nextItems } as AgentState;
-      });
+      // no-op in simplified schema
     },
-    [setState]
+    []
   );
 
-  const addTag = useCallback(
-    (itemId: string, tag: string) => {
-      const next = tag.trim();
-      if (!next) return;
-      setState((prev) => {
-        const base = prev ?? initialState;
-        const nextItems = (base.items ?? []).map((p: Item) => {
-          if (p.id !== itemId) return p;
-          if (p.workItem.tags.includes(next)) return p;
-          return { ...p, workItem: { ...p.workItem, tags: [...p.workItem.tags, next] } };
-        });
-        return { ...base, items: nextItems } as AgentState;
-      });
-    },
-    [setState]
-  );
+  // Helper to generate default data by type
+  const defaultDataFor = useCallback((type: CardType): ItemData => {
+    switch (type) {
+      case "work":
+      case "entity":
+        return {
+          field1: "",
+          field2: "",
+          field2Options: ["Option A", "Option B", "Option C"],
+          field3Date: "",
+          tagsAvailable: ["Priority", "Active", "Premium"],
+          tags: [],
+        } as WorkEntityData;
+      case "notes":
+        return { content: "" } as NotesData;
+      case "chart":
+        return { metrics: [
+          { label: "Metric A", value: 0 },
+          { label: "Metric B", value: 0 },
+          { label: "Metric C", value: 0 },
+        ] } as ChartData;
+      default:
+        return { content: "" } as NotesData;
+    }
+  }, []);
 
   const removeTag = useCallback(
     (itemId: string, tag: string) => {
-      setState((prev) => {
-        const base = prev ?? initialState;
-        const nextItems = (base.items ?? []).map((p: Item) =>
-          p.id === itemId
-            ? { ...p, workItem: { ...p.workItem, tags: p.workItem.tags.filter((t) => t !== tag) } }
-            : p
-        );
-        return { ...base, items: nextItems } as AgentState;
+      updateItemData(itemId, (prev) => {
+        const d = prev as WorkEntityData;
+        return { ...d, tags: (d.tags ?? []).filter((t) => t !== tag) };
       });
     },
-    [setState]
+    [updateItemData]
   );
 
-  const addItem = useCallback((name?: string, description?: string) => {
-    const id = "prj_" + Date.now().toString(36);
+  const addItem = useCallback((type?: CardType, name?: string) => {
+    const id = "itm_" + Date.now().toString(36);
+    const t: CardType = type ?? "work";
     const item: Item = {
       id,
+      type: t,
       name: name && name.trim() ? name.trim() : "Untitled Item",
-      description:
-        description && description.trim()
-          ? description.trim()
-          : "",
-      workItem: {
-        id: "wi_" + Date.now().toString(36),
-        title: "New work item",
-        type: "Task",
-        priority: "P2",
-        status: "Not Started",
-        owner: { id: "u_1", name: "Unassigned", avatarUrl: "" },
-        dueDate: "",
-        tags: [],
-        checklist: [],
-        description: "",
-        links: [],
-      },
+      data: defaultDataFor(t),
     };
     setState((prev) => {
       const base = prev ?? initialState;
@@ -340,7 +358,7 @@ export default function CopilotKitPage() {
       return { ...base, items: nextItems, activeItemId: id } as AgentState;
     });
     return id;
-  }, [setState]);
+  }, [defaultDataFor, setState]);
 
   const setActiveItem = useCallback((itemId: string) => {
     setState((prev) => {
@@ -393,26 +411,35 @@ export default function CopilotKitPage() {
     description: "Set an item's description.",
     available: "remote",
     parameters: [
-      { name: "description", type: "string", required: true, description: "The new item description." },
+      { name: "description", type: "string", required: true, description: "The new item description (Notes only)." },
       { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
     handler: ({ description, itemId }: { description: string; itemId: string }) => {
-      updateItem(itemId, { description });
+      updateItemData(itemId, (prev) => {
+        if ((prev as NotesData).content !== undefined) {
+          return { ...(prev as NotesData), content: description } as NotesData;
+        }
+        return prev;
+      });
     },
   });
 
   useCopilotAction({
     name: "setWorkItemOwnerName",
-    description: "Update the owner name for an item's work item.",
+    description: "Update field1 for an item (work/entity).",
     available: "remote",
     parameters: [
-      { name: "name", type: "string", required: true, description: "Full name of the owner." },
+      { name: "value", type: "string", required: true, description: "New value for field1." },
       { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
-    handler: ({ name, itemId }: { name: string; itemId: string }) => {
-      const found = (state?.items ?? initialState.items).find((p) => p.id === itemId);
-      const currentOwner: Owner = found ? found.workItem.owner : { id: "u_1", name: "Unassigned", avatarUrl: "" };
-      updateWorkItem(itemId, { owner: { ...currentOwner, name } });
+    handler: ({ value, itemId }: { value: string; itemId: string }) => {
+      updateItemData(itemId, (prev) => {
+        if ((prev as WorkEntityData).field1 !== undefined || (prev as WorkEntityData).field2Options !== undefined) {
+          const d = prev as WorkEntityData;
+          return { ...d, field1: value };
+        }
+        return prev;
+      });
     },
   });
 
@@ -421,11 +448,12 @@ export default function CopilotKitPage() {
     description: "Create a new item.",
     available: "remote",
     parameters: [
+      { name: "type", type: "string", required: false, description: "One of: work, entity, notes, chart." },
       { name: "name", type: "string", required: false, description: "Optional item name." },
-      { name: "description", type: "string", required: false, description: "Optional item description." },
     ],
-    handler: ({ name, description }: { name?: string; description?: string }) => {
-      addItem(name, description);
+    handler: ({ type, name }: { type?: string; name?: string }) => {
+      const t = (type as CardType | undefined);
+      addItem(t, name);
     },
   });
 
@@ -447,7 +475,7 @@ export default function CopilotKitPage() {
       className="h-screen flex flex-col"
     >
       {/* Header */}
-      <Header running={running} onAddItem={() => addItem()} />
+      <Header running={running} onAddItem={() => addItem()} addTypedItem={(t) => addItem(t)} />
 
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden">
@@ -486,50 +514,13 @@ export default function CopilotKitPage() {
 
                   <ItemHeader
                     name={item.name}
-                    description={item.description}
-                    onNameChange={(v) => {
-                      updateItem(item.id, { name: v });
-                    }}
-                    onDescriptionChange={(v) => {
-                      updateItem(item.id, { description: v });
-                    }}
+                    description={""}
+                    onNameChange={(v) => updateItem(item.id, { name: v })}
+                    onDescriptionChange={(v) => updateItemData(item.id, (prev) => prev)}
                   />
 
                   <div className="mt-6">
-                    <WorkItemCard
-                      item={item.workItem}
-                      onChange={(updates) => {
-                        const beforeOwner = item.workItem.owner.name;
-                        updateWorkItem(item.id, updates);
-                      }}
-                      onSetChecklistItem={(id, updates) => {
-                        updateWorkItem(item.id, {
-                          checklist: item.workItem.checklist.map((c) => (c.id === id ? { ...c, ...updates } : c)),
-                        });
-                      }}
-                      onAddChecklistItem={(text) => {
-                        const trimmed = text.trim();
-                        if (!trimmed) return;
-                        updateWorkItem(item.id, {
-                          checklist: [
-                            ...item.workItem.checklist,
-                            { id: `c${Date.now()}`, text: trimmed, done: false, proposed: false },
-                          ],
-                        });
-                      }}
-                      onRemoveChecklistItem={(id) => {
-                        updateWorkItem(item.id, {
-                          checklist: item.workItem.checklist.filter((c) => c.id !== id),
-                        });
-                      }}
-                      onAddTag={(tag) => {
-                        if (item.workItem.tags.includes(tag.trim())) return;
-                        updateWorkItem(item.id, { tags: [...item.workItem.tags, tag.trim()] });
-                      }}
-                      onRemoveTag={(tag) => {
-                        updateWorkItem(item.id, { tags: item.workItem.tags.filter((t) => t !== tag) });
-                      }}
-                    />
+                    <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={(tag) => toggleTag(item.id, tag)} />
                   </div>
                 </div>
               ))}
@@ -572,7 +563,7 @@ export default function CopilotKitPage() {
   );
 }
 
-function Header({ running, onAddItem }: { running: boolean; onAddItem: () => void }) {
+function Header({ running, onAddItem, addTypedItem }: { running: boolean; onAddItem: () => void; addTypedItem?: (t: CardType) => void }) {
   return (
       <header className="border-b border-border px-6 py-4 flex items-center justify-between bg-card shadow-sm">
         <div className="flex items-center gap-4">
@@ -580,10 +571,20 @@ function Header({ running, onAddItem }: { running: boolean; onAddItem: () => voi
           <div className="text-sm text-muted-foreground font-medium">Collaborative AI Workspace</div>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" className="gap-2 font-medium bg-transparent" onClick={onAddItem}>
-            <Plus className="h-4 w-4" />
-            Add Item
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2 font-medium bg-transparent">
+                <Plus className="h-4 w-4" />
+                New…
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onClick={() => addTypedItem?.("work")}>Work item</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => addTypedItem?.("entity")}>Entity</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => addTypedItem?.("notes")}>Notes</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => addTypedItem?.("chart")}>Chart</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
   );
@@ -604,138 +605,133 @@ function ItemHeader(props: {
         value={name}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => onNameChange(e.target.value)}
         onBlur={(e: React.FocusEvent<HTMLInputElement>) => onNameCommit?.(e.target.value)}
-        placeholder="Item name"
+        placeholder="Item title"
         className="w-full appearance-none text-2xl font-semibold outline-none placeholder:text-gray-400"
       />
-      <textarea
+      <TextareaAutosize
         value={description}
         onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onDescriptionChange(e.target.value)}
         onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => onDescriptionCommit?.(e.target.value)}
-        placeholder="Describe this item."
-        className="mt-3 max-h-56 w-full resize-y overflow-auto rounded-lg border bg-white/60 p-3 text-sm leading-6 outline-none placeholder:text-gray-400"
-        rows={4}
+        placeholder="Optional subtitle or short description"
+        className="mt-2 w-full bg-transparent text-sm leading-6 outline-none placeholder:text-gray-400"
+        minRows={1}
       />
     </div>
   );
 }
 
-function WorkItemCard(props: {
-  item: WorkItem;
-  onChange: (updates: Partial<WorkItem>) => void;
-  onSetChecklistItem: (id: string, updates: Partial<ChecklistItem>) => void;
-  onAddChecklistItem: (text: string) => void;
-  onRemoveChecklistItem: (id: string) => void;
-  onAddTag: (tag: string) => void;
-  onRemoveTag: (tag: string) => void;
-  onOwnerCommit?: (newName: string) => void;
+function CardRenderer(props: {
+  item: Item;
+  onUpdateData: (updater: (prev: ItemData) => ItemData) => void;
+  onToggleTag: (tag: string) => void;
 }) {
-  const { item, onChange, onSetChecklistItem, onAddChecklistItem, onRemoveChecklistItem, onAddTag, onRemoveTag, onOwnerCommit } = props;
+  const { item, onUpdateData, onToggleTag } = props;
+
+  if (item.type === "notes") {
+    const d = item.data as NotesData;
+    return (
+      <div className="rounded-2xl border p-5 shadow-sm">
+        <label className="mb-1 block text-xs font-medium text-gray-500">Field 1 (e.g., Rich Text Content)</label>
+        <TextareaAutosize
+          value={d.content ?? ""}
+          onChange={(e) => onUpdateData(() => ({ content: e.target.value }))}
+          placeholder="Write notes or description..."
+          className="min-h-40 w-full resize-none rounded-md border bg-white/60 p-3 text-sm leading-6 outline-none"
+          minRows={6}
+        />
+      </div>
+    );
+  }
+
+  if (item.type === "chart") {
+    const d = item.data as ChartData;
+    return (
+      <div className="rounded-2xl border p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-sm font-medium">Simple Bar Chart</span>
+        </div>
+        <div className="space-y-3">
+          {d.metrics.map((m, i) => (
+            <div key={`${m.label}-${i}`} className="grid grid-cols-[120px_1fr_40px] items-center gap-3">
+              <span className="text-sm text-muted-foreground">{m.label}</span>
+              <Progress value={m.value} />
+              <input
+                className="w-12 rounded-md border px-2 py-1 text-xs outline-none"
+                type="number"
+                min={0}
+                max={100}
+                value={m.value}
+                onChange={(e) => onUpdateData((prev) => {
+                  const cd = prev as ChartData;
+                  const next = [...cd.metrics];
+                  next[i] = { ...next[i], value: Math.max(0, Math.min(100, Number(e.target.value))) };
+                  return { ...cd, metrics: next };
+                })}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const d = item.data as WorkEntityData;
+  const set = (partial: Partial<WorkEntityData>) => onUpdateData((prev) => ({ ...(prev as WorkEntityData), ...partial }));
 
   return (
     <div className="rounded-2xl border p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <input
-          value={item.title}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ title: e.target.value })}
-          placeholder="Work item title"
-          className="w-full appearance-none text-lg font-medium outline-none placeholder:text-gray-400"
-        />
-        <div className="flex items-center gap-2">
-          <Select
-            label="Type"
-            value={item.type}
-            onChange={(v) => onChange({ type: v })}
-            options={["Task", "Bug", "Research"]}
-          />
-          <Select
-            label="Priority"
-            value={item.priority}
-            onChange={(v) => onChange({ priority: v as Priority })}
-            options={["P0", "P1", "P2", "P3"]}
-          />
-          <Select
-            label="Status"
-            value={item.status}
-            onChange={(v) => onChange({ status: v as Status })}
-            options={["Not Started", "In Progress", "Blocked", "Done"]}
-          />
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-500">Field 1</label>
           <input
-            value={item.dueDate}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange({ dueDate: e.target.value })}
+            value={d.field1 ?? ""}
+            onChange={(e) => set({ field1: e.target.value })}
+            className="w-full rounded-md border px-2 py-1.5 text-sm outline-none"
+            placeholder="Field 1 value"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-500">Field 2</label>
+          <select
+            value={d.field2 ?? ""}
+            onChange={(e) => set({ field2: e.target.value })}
+            className="w-full rounded-md border px-2 py-1.5 text-sm outline-none"
+          >
+            <option value="">Select...</option>
+            {(d.field2Options ?? []).map((opt) => (
+              <option key={opt} value={opt}>{opt}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-gray-500">Field 3 (Date)</label>
+          <input
             type="date"
-            className="h-9 rounded-md border px-2 text-sm outline-none"
+            value={d.field3Date ?? ""}
+            onChange={(e) => set({ field3Date: e.target.value })}
+            className="w-full rounded-md border px-2 py-1.5 text-sm outline-none"
           />
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Owner</label>
-            <input
-              value={item.owner.name}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                onChange({ owner: { ...item.owner, name: e.target.value } })
-              }
-              onBlur={(e: React.FocusEvent<HTMLInputElement>) => onOwnerCommit?.(e.target.value)}
-              placeholder="Assignee"
-              className="w-full rounded-md border px-2 py-1.5 text-sm outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Tags</label>
-            <TagEditor tags={item.tags} onAdd={onAddTag} onRemove={onRemoveTag} />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Checklist</label>
-            <div className="space-y-2">
-              {item.checklist.map((c) => (
-                <div key={c.id} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={c.done}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => onSetChecklistItem(c.id, { done: e.target.checked })}
-                    className="h-4 w-4"
-                  />
-                  <input
-                    value={c.text}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => onSetChecklistItem(c.id, { text: e.target.value })}
-                    className="flex-1 rounded-md border px-2 py-1 text-sm outline-none"
-                  />
-                  <button
-                    onClick={() => onRemoveChecklistItem(c.id)}
-                    className="rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-              <AddChecklistInput onAdd={onAddChecklistItem} />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Description</label>
-            <textarea
-              value={item.description}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onChange({ description: e.target.value })}
-              placeholder="Write details, context, or paste a brief."
-              className="min-h-40 w-full resize-y rounded-md border bg-white/60 p-3 text-sm leading-6 outline-none"
-              rows={8}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Related links</label>
-            <LinkList
-              links={item.links}
-              onChange={(next) => onChange({ links: next })}
-            />
-          </div>
+      <div className="mt-4">
+        <label className="mb-1 block text-xs font-medium text-gray-500">Tags</label>
+        <div className="flex flex-wrap gap-2">
+          {(d.tagsAvailable ?? []).map((t) => {
+            const active = (d.tags ?? []).includes(t);
+            return (
+              <button
+                key={t}
+                onClick={() => onToggleTag(t)}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
+                  active ? "bg-accent/20 border-accent text-accent" : "text-gray-600"
+                )}
+              >
+                {t}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
