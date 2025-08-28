@@ -103,7 +103,7 @@ export default function CopilotKitPage() {
       const projects = s?.projects ?? initialState.projects;
       if (!projects.length) return null;
       return (
-        <pre className="text-xs text-violet-600 font-mono">
+        <pre className="whitespace-pre-wrap text-xs text-violet-600 font-mono w-full overflow-hidden">
           {JSON.stringify(projects, null, 2)}
         </pre>
       );
@@ -405,15 +405,18 @@ export default function CopilotKitPage() {
 
 
   return (
-    <main
+    <div
       style={{ "--copilot-kit-primary-color": "#2563eb" } as CopilotKitCSSProperties}
-      className="min-h-screen"
+      className="h-screen flex flex-col"
     >
+      {/* Header */}
       <Header running={running} />
 
-      <section className="mx-auto max-w-6xl px-4 pb-24 pt-6">
-        <div className="flex gap-6">
-          <div className="flex-1 min-w-0">
+      {/* Main Layout */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Main Content */}
+        <main className="flex-1 overflow-auto px-4 py-6">
+          <div className="mx-auto max-w-6xl">
             <div className="mb-4 flex items-center justify-between">
               <span className="text-sm text-gray-600">Projects</span>
               <button
@@ -482,21 +485,21 @@ export default function CopilotKitPage() {
               ))}
             </div>
           </div>
-          <aside className="sticky top-14 h-svh !w-[320px]">
-            <CopilotChat
-              className="h-full w-full"
-              labels={{
-                title: "Agent",
-                initial:
-                  "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
-              }}
-            />
-          </aside>
-        </div>
-      </section>
+        </main>
 
-      
-    </main>
+        {/* Chat Sidebar */}
+        <aside className="h-full shrink-0 border-l">
+          <CopilotChat
+            className="h-full !w-[320px]"
+            labels={{
+              title: "Agent",
+              initial:
+                "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
+            }}
+          />
+        </aside>
+      </div>
+    </div>
   );
 }
 
