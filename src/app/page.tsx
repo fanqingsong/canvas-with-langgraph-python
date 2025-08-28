@@ -4,6 +4,8 @@ import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAddition
 import { CopilotKitCSSProperties, CopilotChat } from "@copilotkit/react-ui";
 import { useCallback, useEffect } from "react";
 import type React from "react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Bot } from "lucide-react";
 
 type WorkItemType = "Task" | "Bug" | "Research";
 type Priority = "P0" | "P1" | "P2" | "P3";
@@ -488,11 +490,29 @@ export default function CopilotKitPage() {
         </main>
 
         {/* Chat Sidebar */}
-        <aside className="h-full shrink-0 border-l">
+        <aside className="flex flex-col align-start animate-in fade-in slide-in-from-right duration-500 bg-white">
+          {/* Chat Header */}
+          <div className="p-4 border-b border-sidebar-border">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground">
+                  <Bot className="h-4 w-4" />
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h3 className="font-bold text-sidebar-foreground">AI Assistant</h3>
+                <div className="flex items-center gap-x-1.5 text-xs text-muted-foreground">
+                  <div className="inline-block size-1.5 rounded-full bg-green-500" />
+                  <div>Online <span className="opacity-50 text-[90%] select-none">•</span> Ready to help</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* Chat Content */}
           <CopilotChat
-            className="h-full !w-[320px]"
+            className="flex-1 overflow-auto !w-[320px]"
             labels={{
-              title: "Agent",
+              title: "Agent ABC",
               initial:
                 "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
             }}
