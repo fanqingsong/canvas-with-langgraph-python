@@ -113,6 +113,7 @@ interface AgentState {
   globalTitle: string;
   globalDescription: string;
   activeItemId: string | null;
+  lastAction?: string;
 }
 
 const initialState: AgentState = {
@@ -120,6 +121,7 @@ const initialState: AgentState = {
   globalTitle: "",
   globalDescription: "",
   activeItemId: null,
+  lastAction: "",
 };
 
 export default function CopilotKitPage() {
@@ -305,9 +307,10 @@ export default function CopilotKitPage() {
   const deleteItem = useCallback((itemId: string) => {
     setState((prev) => {
       const base = prev ?? initialState;
+      const existed = (base.items ?? []).some((p) => p.id === itemId);
       const items: Item[] = (base.items ?? []).filter((p) => p.id !== itemId);
       const activeItemId = base.activeItemId === itemId ? null : base.activeItemId;
-      return { ...base, items, activeItemId } as AgentState;
+      return { ...base, items, activeItemId, lastAction: existed ? `deleted:${itemId}` : `not_found:${itemId}` } as AgentState;
     });
   }, [setState]);
 
@@ -504,7 +507,9 @@ export default function CopilotKitPage() {
       { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
     handler: ({ itemId }: { itemId: string }) => {
+      const existed = (state?.items ?? initialState.items).some((p) => p.id === itemId);
       deleteItem(itemId);
+      return existed ? `deleted:${itemId}` : `not_found:${itemId}`;
     },
   });
 

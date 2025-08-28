@@ -123,11 +123,14 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     global_title = state.get("globalTitle", "")
     global_description = state.get("globalDescription", "")
     active_item_id = state.get('activeItemId', None)
+    post_tool_guidance = state.get("__last_tool_guidance", None)
+    last_action = state.get("lastAction", "")
     system_message = SystemMessage(
         content=(
             f"globalTitle (ground truth): {global_title}\n"
             f"globalDescription (ground truth): {global_description}\n"
             f"itemsState (ground truth):\n{items_summary}\n"
+            f"lastAction (ground truth): {last_action}\n"
             f"activeItemId (ground truth): {active_item_id}\n"
             "STRICT GROUNDING RULES:\n"
             "1) ONLY use globalTitle, globalDescription, itemsState, and activeItemId as the source of truth.\n"
@@ -146,6 +149,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "   Then, return to the task you are assigned to help the user manage their items.\n"
             "8) Before responding anything having to do with the current values in the state, assume the user might have changed those values since the last message.\n"
             "   Always use these (ground truth) values as the only source of truth when responding.\n"
+            + (f"\nPOST-TOOL POLICY:\n{post_tool_guidance}\n" if post_tool_guidance else "")
         )
     )
 
@@ -172,10 +176,12 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "LATEST GROUND TRUTH (authoritative):\n"
             f"- globalTitle: {global_title!s}\n"
             f"- globalDescription: {global_description!s}\n"
-            f"- items:\n{items_summary}\n\n"
+            f"- items:\n{items_summary}\n"
+            f"- lastAction: {last_action}\n\n"
             "Resolution policy: If ANY prior message mentions values that conflict with the above,\n"
             "those earlier mentions are obsolete and MUST be ignored.\n"
             "When asked 'what is it now', ALWAYS read from this LATEST GROUND TRUTH.\n"
+            + ("\nIf the last tool result indicated success (e.g., 'deleted:ID'), confirm the action rather than re-stating absence." if post_tool_guidance else "")
         )
     )
 
@@ -197,6 +203,8 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                 "globalTitle": state.get("globalTitle", ""),
                 "globalDescription": state.get("globalDescription", ""),
                 "activeItemId": state.get("activeItemId", None),
+                # guidance for follow-up after tool execution
+                "__last_tool_guidance": "If a deletion tool reports success (deleted:ID), acknowledge deletion even if the item no longer exists afterwards."
             }
         )
 
@@ -210,6 +218,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "globalTitle": state.get("globalTitle", ""),
             "globalDescription": state.get("globalDescription", ""),
             "activeItemId": state.get("activeItemId", None),
+            "__last_tool_guidance": None,
         }
     )
 
