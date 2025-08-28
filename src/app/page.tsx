@@ -99,6 +99,7 @@ interface Item {
   id: string;
   type: CardType;
   name: string; // editable title
+  subtitle: string; // subtitle shown under the title
   data: ItemData;
 }
 
@@ -368,7 +369,8 @@ export default function CopilotKitPage() {
     const item: Item = {
       id,
       type: t,
-      name: name && name.trim() ? name.trim() : "Untitled Item",
+      name: name && name.trim() ? name.trim() : "",
+      subtitle: "",
       data: defaultDataFor(t),
     };
     setState((prev) => {
@@ -537,8 +539,10 @@ export default function CopilotKitPage() {
                 <div key={item.id} className="rounded-2xl border p-5 shadow-sm">
                   <ItemHeader
                     name={item.name}
+                    subtitle={item.subtitle}
                     description={""}
                     onNameChange={(v) => updateItem(item.id, { name: v })}
+                    onSubtitleChange={(v) => updateItem(item.id, { subtitle: v })}
                     onDescriptionChange={(v) => updateItemData(item.id, (prev) => prev)}
                   />
 
@@ -602,13 +606,15 @@ function Header({ running, onAddItem, addTypedItem }: { running: boolean; onAddI
 
 function ItemHeader(props: {
   name: string;
+  subtitle: string;
   description: string;
   onNameChange: (value: string) => void;
+  onSubtitleChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
   onNameCommit?: (value: string) => void;
   onDescriptionCommit?: (value: string) => void;
 }) {
-  const { name, description, onNameChange, onDescriptionChange, onNameCommit, onDescriptionCommit } = props;
+  const { name, subtitle, description, onNameChange, onSubtitleChange, onDescriptionChange, onNameCommit, onDescriptionCommit } = props;
   return (
     <div className="rounded-2xl border p-5 shadow-sm">
       <input
@@ -619,9 +625,8 @@ function ItemHeader(props: {
         className="w-full appearance-none text-2xl font-semibold outline-none placeholder:text-gray-400"
       />
       <TextareaAutosize
-        value={description}
-        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onDescriptionChange(e.target.value)}
-        onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => onDescriptionCommit?.(e.target.value)}
+        value={subtitle}
+        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onSubtitleChange(e.target.value)}
         placeholder="Optional subtitle or short description"
         className="mt-2 w-full bg-transparent text-sm leading-6 resize-none outline-none placeholder:text-gray-400"
         minRows={1}
