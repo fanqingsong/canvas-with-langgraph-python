@@ -39,12 +39,28 @@ def summarize_items_for_prompt(state: AgentState) -> str:
             pid = p.get("id", "")
             mark = " (active)" if pid == active_id else ""
             name = p.get("name", "")
-            wi = p.get("workItem", {}) or {}
-            owner = (wi.get("owner", {}) or {}).get("name", "")
-            status = wi.get("status", "")
-            due = wi.get("dueDate", "")
-            tags = ", ".join(wi.get("tags", []) or [])
-            lines.append(f"id={pid}{mark} · name={name} · owner={owner} · status={status} · due={due} · tags=[{tags}]")
+            itype = p.get("type", "")
+            data = p.get("data", {}) or {}
+            summary = ""
+            if itype == "work":
+                field1 = data.get("field1", "")
+                field2 = data.get("field2", "")
+                field3 = data.get("field3Date", "")
+                checklist = ", ".join([c.get("text", "") for c in (data.get("checklist", []) or [])])
+                summary = f"field1={field1} · field2={field2} · field3Date={field3} · checklist=[{checklist}]"
+            elif itype == "entity":
+                field1 = data.get("field1", "")
+                field2 = data.get("field2", "")
+                tags = ", ".join(data.get("tags", []) or [])
+                summary = f"field1={field1} · field2={field2} · tags=[{tags}]"
+            elif itype == "notes":
+                content = data.get("content", "")
+                preview = (content[:60] + "…") if len(content) > 60 else content
+                summary = f"notesPreview=\"{preview}\""
+            elif itype == "chart":
+                metrics = ", ".join([f"{m.get('label','')}:{m.get('value',0)}%" for m in (data.get("metrics", []) or [])])
+                summary = f"metrics=[{metrics}]"
+            lines.append(f"id={pid}{mark} · name={name} · type={itype} · {summary}")
         return "\n".join(lines) if lines else "(no items)"
     except Exception:
         return "(unable to summarize items)"
