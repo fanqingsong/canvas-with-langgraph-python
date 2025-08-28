@@ -85,7 +85,6 @@ export default function CopilotKitPage() {
     name: "sample_agent",
     render: ({ state: s }) => {
       const projects = s?.projects ?? initialState.projects;
-      if (!projects.length) return null;
       return (
         <pre className="whitespace-pre-wrap text-xs text-violet-600 font-mono w-full overflow-hidden">
           {JSON.stringify(projects, null, 2)}
@@ -429,7 +428,7 @@ export default function CopilotKitPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Main Content */}
         <main className="flex-1 overflow-auto px-4 py-6">
-          <div className="mx-auto max-w-7xl h-full min-h-8">
+          <div className="flex flex-col mx-auto max-w-7xl h-full min-h-8">
             {/* Global Title & Description */}
             <div className="rounded-2xl border p-5 shadow-sm mb-6">
               <input
@@ -447,7 +446,7 @@ export default function CopilotKitPage() {
               />
             </div>
             {(state?.projects ?? []).length === 0 ? (
-              <EmptyState onAddProject={() => addProject()} />
+              <EmptyState className="flex-1" onAddProject={() => addProject()} />
             ) : (
             <div className="grid gap-6 md:grid-cols-2">
               {(state?.projects ?? initialState.projects).map((project) => (

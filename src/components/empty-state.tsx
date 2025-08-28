@@ -3,15 +3,17 @@
 import type React from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export function EmptyState(props: {
   title?: string;
   description?: string;
+  className?: string;
   onAddProject: () => void;
 }) {
   const { title = "No projects yet", description = "Create your first project to get started.", onAddProject } = props;
   return (
-    <div className="grid place-items-center justify-center rounded-2xl p-8 bg-border/50 border-foreground/25 border-dashed border-2 h-full">
+    <div className={cn("grid place-items-center justify-center rounded-2xl p-8 bg-border/50 border-foreground/25 border-dashed border-2", props.className)}>
       <div className="mx-auto max-w-lg text-center">
         <h2 className="text-lg font-semibold text-foreground">{title}</h2>
         <p className="mt-2 text-sm text-muted-foreground">{description}</p>
