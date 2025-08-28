@@ -83,11 +83,17 @@ export default function CopilotKitPage() {
 
   useCoAgentStateRender<AgentState>({
     name: "sample_agent",
-    render: ({ state: s }) => {
-      const projects = s?.projects ?? initialState.projects;
+    render: ({ state }) => {
+      const projects = state?.projects ?? initialState.projects;
+      const globalTitle = state?.globalTitle ?? initialState.globalTitle;
+      const globalDescription = state?.globalDescription ?? initialState.globalDescription;
       return (
         <pre className="whitespace-pre-wrap text-xs text-violet-600 font-mono w-full overflow-hidden">
-          {JSON.stringify(projects, null, 2)}
+          {JSON.stringify({
+            projects,
+            globalTitle,
+            globalDescription,
+          }, null, 2)}
         </pre>
       );
     },
