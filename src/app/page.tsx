@@ -14,6 +14,25 @@ import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 
+function NewItemMenu({ onSelect, align = "end" }: { onSelect: (t: CardType) => void; align?: "start" | "end" | "center" }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-2 font-medium bg-background">
+          <Plus className="h-4 w-4" />
+          New
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align={align} className="w-40 bg-background">
+        <DropdownMenuItem onClick={() => onSelect("work")}>Work item</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("entity")}>Entity</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("notes")}>Notes</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("chart")}>Chart</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 type WorkItemType = "Task" | "Bug" | "Research";
 type Priority = "P0" | "P1" | "P2" | "P3";
 type Status = "Not Started" | "In Progress" | "Blocked" | "Done";
@@ -475,7 +494,7 @@ export default function CopilotKitPage() {
       className="h-screen flex flex-col"
     >
       {/* Header */}
-      <Header running={running} onAddItem={() => addItem()} addTypedItem={(t) => addItem(t)} />
+      <Header running={running} addTypedItem={(t) => addItem(t)} />
 
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden">
@@ -503,7 +522,15 @@ export default function CopilotKitPage() {
               />
             </div>
             {(state?.items ?? []).length === 0 ? (
-              <EmptyState className="flex-1" onAddItem={() => addItem()} onAddTypedItem={(t) => addItem(t)} />
+              <EmptyState className="flex-1">
+                <div className="mx-auto max-w-lg text-center">
+                  <h2 className="text-lg font-semibold text-foreground">Nothing here yet</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">Create your first item to get started.</p>
+                  <div className="mt-6 flex justify-center">
+                    <NewItemMenu onSelect={(t) => addItem(t)} align="center" />
+                  </div>
+                </div>
+              </EmptyState>
             ) : (
             <div className="grid gap-6 md:grid-cols-2">
               {(state?.items ?? initialState.items).map((item) => (
@@ -559,7 +586,7 @@ export default function CopilotKitPage() {
   );
 }
 
-function Header({ running, onAddItem, addTypedItem }: { running: boolean; onAddItem: () => void; addTypedItem?: (t: CardType) => void }) {
+function Header({ running, onAddItem, addTypedItem }: { running: boolean; onAddItem?: () => void; addTypedItem?: (t: CardType) => void }) {
   return (
       <header className="border-b border-border px-6 py-4 flex items-center justify-between bg-card shadow-sm">
         <div className="flex items-center gap-4">
@@ -567,20 +594,7 @@ function Header({ running, onAddItem, addTypedItem }: { running: boolean; onAddI
           <div className="text-sm text-muted-foreground font-medium">Collaborative AI Workspace</div>
         </div>
         <div className="flex items-center gap-3">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-2 font-medium bg-transparent">
-                <Plus className="h-4 w-4" />
-                New…
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40 bg-background">
-              <DropdownMenuItem onClick={() => addTypedItem?.("work")}>Work item</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => addTypedItem?.("entity")}>Entity</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => addTypedItem?.("notes")}>Notes</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => addTypedItem?.("chart")}>Chart</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <NewItemMenu onSelect={(t) => addTypedItem?.(t)} />
         </div>
       </header>
   );
