@@ -60,10 +60,14 @@ interface Project {
 
 interface AgentState {
   projects: Project[];
+  globalTitle: string;
+  globalDescription: string;
 }
 
 const initialState: AgentState = {
   projects: [],
+  globalTitle: "",
+  globalDescription: "",
 };
 
 export default function CopilotKitPage() {
@@ -94,6 +98,8 @@ export default function CopilotKitPage() {
   useCopilotAdditionalInstructions({
     instructions: (() => {
       const projects = state?.projects ?? initialState.projects;
+      const gTitle = state?.globalTitle ?? "";
+      const gDesc = state?.globalDescription ?? "";
       const summary = projects
         .slice(0, 5)
         .map((p) => `id=${p.id} • name=${p.name} • owner=${p.workItem.owner.name}`)
@@ -101,6 +107,8 @@ export default function CopilotKitPage() {
       return [
         "ALWAYS ANSWER FROM SHARED STATE (GROUND TRUTH).",
         "If a command does not specify which project to change, ask the user to clarify before proceeding.",
+        `Global Title: ${gTitle || "(none)"}`,
+        `Global Description: ${gDesc || "(none)"}`,
         "Projects (sample):",
         summary || "(none)",
       ].join("\n");
@@ -330,6 +338,31 @@ export default function CopilotKitPage() {
 
   // Frontend Actions (exposed as tools to the agent via CopilotKit)
   useCopilotAction({
+    name: "setGlobalTitle",
+    description: "Set the global title (outside of projects).",
+    available: "remote",
+    parameters: [
+      { name: "title", type: "string", required: true, description: "The new global title." },
+    ],
+    handler: ({ title }: { title: string }) => {
+      setState((prev) => ({ ...(prev ?? initialState), globalTitle: title }));
+    },
+  });
+
+  useCopilotAction({
+    name: "setGlobalDescription",
+    description: "Set the global description (outside of projects).",
+    available: "remote",
+    parameters: [
+      { name: "description", type: "string", required: true, description: "The new global description." },
+    ],
+    handler: ({ description }: { description: string }) => {
+      setState((prev) => ({ ...(prev ?? initialState), globalDescription: description }));
+    },
+  });
+
+  // Frontend Actions (project-scoped)
+  useCopilotAction({
     name: "setProjectName",
     description: "Set a project's name.",
     available: "remote",
@@ -397,6 +430,22 @@ export default function CopilotKitPage() {
         {/* Main Content */}
         <main className="flex-1 overflow-auto px-4 py-6">
           <div className="mx-auto max-w-7xl h-full min-h-8">
+            {/* Global Title & Description */}
+            <div className="rounded-2xl border p-5 shadow-sm mb-6">
+              <input
+                value={state?.globalTitle ?? initialState.globalTitle}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setState((prev) => ({ ...(prev ?? initialState), globalTitle: e.target.value }))}
+                placeholder="Page title"
+                className="w-full appearance-none text-2xl font-semibold outline-none placeholder:text-gray-400"
+              />
+              <textarea
+                value={state?.globalDescription ?? initialState.globalDescription}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setState((prev) => ({ ...(prev ?? initialState), globalDescription: e.target.value }))}
+                placeholder="High-level description for this workspace."
+                className="mt-3 max-h-56 w-full resize-y overflow-auto rounded-lg border bg-white/60 p-3 text-sm leading-6 outline-none placeholder:text-gray-400"
+                rows={4}
+              />
+            </div>
             {(state?.projects ?? []).length === 0 ? (
               <EmptyState onAddProject={() => addProject()} />
             ) : (
