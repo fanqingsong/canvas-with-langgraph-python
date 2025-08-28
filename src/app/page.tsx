@@ -414,7 +414,7 @@ export default function CopilotKitPage() {
       className="h-screen flex flex-col"
     >
       {/* Header */}
-      <Header running={running} />
+      <Header running={running} onAddProject={() => addProject()} />
 
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden">
@@ -525,7 +525,7 @@ export default function CopilotKitPage() {
   );
 }
 
-function Header({ running }: { running: boolean }) {
+function Header({ running, onAddProject }: { running: boolean; onAddProject: () => void }) {
   return (
       <header className="border-b border-border px-6 py-4 flex items-center justify-between bg-card shadow-sm">
         <div className="flex items-center gap-4">
@@ -533,7 +533,7 @@ function Header({ running }: { running: boolean }) {
           <div className="text-sm text-muted-foreground font-medium">Collaborative AI Workspace</div>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" className="gap-2 font-medium bg-transparent" onClick={handleAddTodo}>
+          <Button variant="outline" size="sm" className="gap-2 font-medium bg-transparent" onClick={onAddProject}>
             <Plus className="h-4 w-4" />
             New Todo
           </Button>
