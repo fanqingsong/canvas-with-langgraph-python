@@ -1,7 +1,7 @@
 "use client";
 
 import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAdditionalInstructions, useLangGraphInterrupt } from "@copilotkit/react-core";
-import { CopilotKitCSSProperties, CopilotSidebar } from "@copilotkit/react-ui";
+import { CopilotKitCSSProperties, CopilotChat } from "@copilotkit/react-ui";
 import { useCallback, useEffect } from "react";
 import type React from "react";
 
@@ -412,84 +412,90 @@ export default function CopilotKitPage() {
       <Header running={running} />
 
       <section className="mx-auto max-w-6xl px-4 pb-24 pt-6">
-        <div className="mb-4 flex items-center justify-between">
-          <span className="text-sm text-gray-600">Projects</span>
-          <button
-            onClick={() => addProject()}
-            className="rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50"
-          >
-            New Project
-          </button>
-        </div>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          {(state?.projects ?? initialState.projects).map((project) => (
-            <div key={project.id} className="rounded-2xl border p-5 shadow-sm">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <span className="text-xs text-gray-500">{project.id}</span>
-              </div>
-
-              <ProjectHeader
-                name={project.name}
-                description={project.description}
-                onNameChange={(v) => {
-                  updateProject(project.id, { name: v });
-                }}
-                onDescriptionChange={(v) => {
-                  updateProject(project.id, { description: v });
-                }}
-              />
-
-              <div className="mt-6">
-                <WorkItemCard
-                  item={project.workItem}
-                  onChange={(updates) => {
-                    const beforeOwner = project.workItem.owner.name;
-                    updateWorkItem(project.id, updates);
-                  }}
-                  onSetChecklistItem={(id, updates) => {
-                    updateWorkItem(project.id, {
-                      checklist: project.workItem.checklist.map((c) => (c.id === id ? { ...c, ...updates } : c)),
-                    });
-                  }}
-                  onAddChecklistItem={(text) => {
-                    const trimmed = text.trim();
-                    if (!trimmed) return;
-                    updateWorkItem(project.id, {
-                      checklist: [
-                        ...project.workItem.checklist,
-                        { id: `c${Date.now()}`, text: trimmed, done: false, proposed: false },
-                      ],
-                    });
-                  }}
-                  onRemoveChecklistItem={(id) => {
-                    updateWorkItem(project.id, {
-                      checklist: project.workItem.checklist.filter((c) => c.id !== id),
-                    });
-                  }}
-                  onAddTag={(tag) => {
-                    if (project.workItem.tags.includes(tag.trim())) return;
-                    updateWorkItem(project.id, { tags: [...project.workItem.tags, tag.trim()] });
-                  }}
-                  onRemoveTag={(tag) => {
-                    updateWorkItem(project.id, { tags: project.workItem.tags.filter((t) => t !== tag) });
-                  }}
-                />
-              </div>
+        <div className="flex gap-6">
+          <div className="flex-1 min-w-0">
+            <div className="mb-4 flex items-center justify-between">
+              <span className="text-sm text-gray-600">Projects</span>
+              <button
+                onClick={() => addProject()}
+                className="rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50"
+              >
+                New Project
+              </button>
             </div>
-          ))}
+
+            <div className="grid gap-6 md:grid-cols-2">
+              {(state?.projects ?? initialState.projects).map((project) => (
+                <div key={project.id} className="rounded-2xl border p-5 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <span className="text-xs text-gray-500">{project.id}</span>
+                  </div>
+
+                  <ProjectHeader
+                    name={project.name}
+                    description={project.description}
+                    onNameChange={(v) => {
+                      updateProject(project.id, { name: v });
+                    }}
+                    onDescriptionChange={(v) => {
+                      updateProject(project.id, { description: v });
+                    }}
+                  />
+
+                  <div className="mt-6">
+                    <WorkItemCard
+                      item={project.workItem}
+                      onChange={(updates) => {
+                        const beforeOwner = project.workItem.owner.name;
+                        updateWorkItem(project.id, updates);
+                      }}
+                      onSetChecklistItem={(id, updates) => {
+                        updateWorkItem(project.id, {
+                          checklist: project.workItem.checklist.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+                        });
+                      }}
+                      onAddChecklistItem={(text) => {
+                        const trimmed = text.trim();
+                        if (!trimmed) return;
+                        updateWorkItem(project.id, {
+                          checklist: [
+                            ...project.workItem.checklist,
+                            { id: `c${Date.now()}`, text: trimmed, done: false, proposed: false },
+                          ],
+                        });
+                      }}
+                      onRemoveChecklistItem={(id) => {
+                        updateWorkItem(project.id, {
+                          checklist: project.workItem.checklist.filter((c) => c.id !== id),
+                        });
+                      }}
+                      onAddTag={(tag) => {
+                        if (project.workItem.tags.includes(tag.trim())) return;
+                        updateWorkItem(project.id, { tags: [...project.workItem.tags, tag.trim()] });
+                      }}
+                      onRemoveTag={(tag) => {
+                        updateWorkItem(project.id, { tags: project.workItem.tags.filter((t) => t !== tag) });
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <aside className="sticky top-14 h-svh !w-[320px]">
+            <CopilotChat
+              className="h-full w-full"
+              labels={{
+                title: "Agent",
+                initial:
+                  "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
+              }}
+            />
+          </aside>
         </div>
       </section>
 
-      <CopilotSidebar
-        clickOutsideToClose={false}
-        defaultOpen={true}
-        labels={{
-          title: "Agent",
-          initial:
-            "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
-        }}
-      />
+      
     </main>
   );
 }
