@@ -1,8 +1,15 @@
 import type { Metadata } from "next";
 
 import { CopilotKit } from "@copilotkit/react-core";
+import { Manrope } from "next/font/google";
 import "./globals.css";
 import "@copilotkit/react-ui/styles.css";
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-manrope",
+});
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -15,8 +22,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={"antialiased"}>
+    <html lang="en" className={`${manrope.variable}`}>
+      <body className={"subpixel-antialiased"}>
         <CopilotKit runtimeUrl="/api/copilotkit" agent="sample_agent">
           {children}
         </CopilotKit>

@@ -69,9 +69,9 @@
 }
 
 @theme inline {
-  /* Updated font variables to use Apple-inspired typography */
-  --font-sans: var(--font-geist);
-  --font-serif: var(--font-manrope);
+  /* Default to Manrope as app-wide sans font */
+  --font-sans: var(--font-manrope);
+  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -122,7 +122,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }
 
 body,
@@ -145,5 +145,30 @@ html {
   ::backdrop,
   ::file-selector-button {
     border-color: var(--color-gray-200, currentColor);
+  }
+}
+
+.copilotKitMessages {
+  @apply pr-0!;
+  .copilotKitMessage {
+    &, & * {
+      @apply font-sans text-sm! subpixel-antialiased leading-normal text-primary!;
+    }
+    &.copilotKitAssistantMessage {
+      @apply rounded-bl-none! pl-3! mb-4! border-1 border-accent/50! bg-accent/10!;
+      .copilotKitMessageControls {
+        @apply mt-3! gap-x-2.5!;
+        &, & * {
+          @apply text-primary/50! transition-colors!;
+        }
+        & button:hover, & button:hover * {
+          @apply text-accent!;
+          transform: scale(1) !important;
+        }
+      }
+    }
+    &.copilotKitUserMessage {
+      @apply rounded-br-none! pr-3! mb-4! border-1 border-primary/25! bg-primary/5!;
+    }
   }
 }
