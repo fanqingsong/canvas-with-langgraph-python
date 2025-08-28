@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PanelLeftClose, PanelLeftOpen, Users, Plus } from "lucide-react"
 import { Bot } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import { cn } from "@/lib/utils";
 
 type WorkItemType = "Task" | "Bug" | "Research";
 type Priority = "P0" | "P1" | "P2" | "P3";
@@ -426,6 +427,16 @@ export default function CopilotKitPage() {
     },
   });
 
+  const titleClasses = cn(
+    /* base styles */
+    "w-full outline-none rounded-md px-2 py-1",
+    "bg-transparent placeholder:text-gray-400",
+    /* hover styles */
+    "hover:ring-1 hover:ring-border",
+    /* focus styles */
+    "focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10",
+    "focus:shadow-accent focus:placeholder:text-accent/65 focus:text-accent",
+  );
 
   return (
     <div
@@ -448,7 +459,7 @@ export default function CopilotKitPage() {
                   setState((prev) => ({ ...(prev ?? initialState), globalTitle: e.target.value }))
                 }
                 placeholder="Canvas title..."
-                className="w-full bg-transparent text-2xl font-semibold outline-none placeholder:text-gray-400 border-0 border-b border-border focus:border-gray-400 rounded-none px-0 pb-1"
+                className={cn(titleClasses, "text-2xl font-semibold")}
               />
               <TextareaAutosize
                 value={state?.globalDescription ?? initialState.globalDescription}
@@ -457,7 +468,7 @@ export default function CopilotKitPage() {
                 }
                 minRows={1}
                 placeholder="Canvas description..."
-                className="mt-2 w-full bg-transparent text-sm leading-6 outline-none placeholder:text-gray-400 border-0 border-b border-border focus:border-gray-400 rounded-none px-0 pb-1 resize-none overflow-hidden"
+                className={cn(titleClasses, "mt-2 text-sm leading-6 resize-none overflow-hidden")}
               />
             </div>
             {(state?.projects ?? []).length === 0 ? (
