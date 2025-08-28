@@ -59,7 +59,7 @@ interface AgentState {
   projects: Project[];
 }
 
-const initialProjectId = "prj_" + Math.random().toString(36).slice(2, 8);
+const initialProjectId = "0001";
 const initialState: AgentState = {
   projects: [
     {
