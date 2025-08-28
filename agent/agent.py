@@ -42,7 +42,7 @@ def summarize_items_for_prompt(state: AgentState) -> str:
             itype = p.get("type", "")
             data = p.get("data", {}) or {}
             summary = ""
-            if itype == "work":
+            if itype == "project":
                 field1 = data.get("field1", "")
                 field2 = data.get("field2", "")
                 field3 = data.get("field3Date", "")
@@ -53,10 +53,10 @@ def summarize_items_for_prompt(state: AgentState) -> str:
                 field2 = data.get("field2", "")
                 tags = ", ".join(data.get("tags", []) or [])
                 summary = f"field1={field1} · field2={field2} · tags=[{tags}]"
-            elif itype == "notes":
+            elif itype == "note":
                 content = data.get("content", "")
                 preview = (content[:60] + "…") if len(content) > 60 else content
-                summary = f"notesPreview=\"{preview}\""
+                summary = f"notePreview=\"{preview}\""
             elif itype == "chart":
                 metrics = ", ".join([f"{m.get('label','')}:{m.get('value',0)}%" for m in (data.get("metrics", []) or [])])
                 summary = f"metrics=[{metrics}]"

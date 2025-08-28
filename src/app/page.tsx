@@ -23,10 +23,10 @@ function NewItemMenu({ onSelect, align = "end" }: { onSelect: (t: CardType) => v
           New
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align={align} className="w-40 bg-background">
-        <DropdownMenuItem onClick={() => onSelect("work")}>Work item</DropdownMenuItem>
+      <DropdownMenuContent align={align} className="min-w-0 w-fit bg-background">
+        <DropdownMenuItem onClick={() => onSelect("project")}>Project</DropdownMenuItem>
         <DropdownMenuItem onClick={() => onSelect("entity")}>Entity</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onSelect("notes")}>Notes</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("note")}>Note</DropdownMenuItem>
         <DropdownMenuItem onClick={() => onSelect("chart")}>Chart</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -69,9 +69,9 @@ interface WorkItem {
   links: LinkItem[];
 }
 
-type CardType = "work" | "entity" | "notes" | "chart";
+type CardType = "project" | "entity" | "note" | "chart";
 
-interface WorkData {
+interface ProjectData {
   field1: string;
   field2: string;
   field3Date: string; // YYYY-MM-DD
@@ -85,7 +85,7 @@ interface EntityData {
   tags: string[];
 }
 
-interface NotesData {
+interface NoteData {
   content?: string;
 }
 
@@ -98,7 +98,7 @@ interface ChartData {
   metrics: ChartMetric[];
 }
 
-type ItemData = WorkData | EntityData | NotesData | ChartData;
+type ItemData = ProjectData | EntityData | NoteData | ChartData;
 
 interface Item {
   id: string;
@@ -250,9 +250,9 @@ export default function CopilotKitPage() {
     },
     render: ({ event, resolve }) => {
       const options: { id: CardType; label: string }[] = [
-        { id: "work", label: "Work item" },
+        { id: "project", label: "Project" },
         { id: "entity", label: "Entity" },
-        { id: "notes", label: "Notes" },
+        { id: "note", label: "Note" },
         { id: "chart", label: "Chart" },
       ];
       let selected: CardType = options[0].id;
@@ -343,13 +343,13 @@ export default function CopilotKitPage() {
   // Helper to generate default data by type
   const defaultDataFor = useCallback((type: CardType): ItemData => {
     switch (type) {
-      case "work":
+      case "project":
         return {
           field1: "",
           field2: "",
           field3Date: "",
           checklist: [],
-        } as WorkData;
+        } as ProjectData;
       case "entity":
         return {
           field1: "",
@@ -357,8 +357,8 @@ export default function CopilotKitPage() {
           tagsAvailable: ["Priority", "Active", "Premium"],
           tags: [],
         } as EntityData;
-      case "notes":
-        return { content: "" } as NotesData;
+      case "note":
+        return { content: "" } as NoteData;
       case "chart":
         return { metrics: [
           { label: "Metric A", value: 0 },
@@ -366,7 +366,7 @@ export default function CopilotKitPage() {
           { label: "Metric C", value: 0 },
         ] } as ChartData;
       default:
-        return { content: "" } as NotesData;
+        return { content: "" } as NoteData;
     }
   }, []);
 
@@ -385,7 +385,7 @@ export default function CopilotKitPage() {
 
   const addItem = useCallback((type?: CardType, name?: string) => {
     const id = "itm_" + Date.now().toString(36);
-    const t: CardType = type ?? "work";
+    const t: CardType = type ?? "project";
     const item: Item = {
       id,
       type: t,
@@ -411,10 +411,10 @@ export default function CopilotKitPage() {
   // Frontend Actions (exposed as tools to the agent via CopilotKit)
   useCopilotAction({
     name: "setGlobalTitle",
-    description: "Set the global title (outside of items).",
+    description: "Set the global title/name (outside of items).",
     available: "remote",
     parameters: [
-      { name: "title", type: "string", required: true, description: "The new global title." },
+      { name: "title", type: "string", required: true, description: "The new global title/name." },
     ],
     handler: ({ title }: { title: string }) => {
       setState((prev) => ({ ...(prev ?? initialState), globalTitle: title }));
@@ -423,10 +423,10 @@ export default function CopilotKitPage() {
 
   useCopilotAction({
     name: "setGlobalDescription",
-    description: "Set the global description (outside of items).",
+    description: "Set the global description/subtitle (outside of items).",
     available: "remote",
     parameters: [
-      { name: "description", type: "string", required: true, description: "The new global description." },
+      { name: "description", type: "string", required: true, description: "The new global description/subtitle." },
     ],
     handler: ({ description }: { description: string }) => {
       setState((prev) => ({ ...(prev ?? initialState), globalDescription: description }));
@@ -436,10 +436,10 @@ export default function CopilotKitPage() {
   // Frontend Actions (item-scoped)
   useCopilotAction({
     name: "setItemName",
-    description: "Set an item's name.",
+    description: "Set an item's name/title.",
     available: "remote",
     parameters: [
-      { name: "name", type: "string", required: true, description: "The new item name." },
+      { name: "name", type: "string", required: true, description: "The new item name/title." },
       { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
     handler: ({ name, itemId }: { name: string; itemId: string }) => {
@@ -449,16 +449,16 @@ export default function CopilotKitPage() {
 
   useCopilotAction({
     name: "setItemDescription",
-    description: "Set an item's description.",
+    description: "Set an item's description/subtitle.",
     available: "remote",
     parameters: [
-      { name: "description", type: "string", required: true, description: "The new item description (Notes only)." },
+      { name: "description", type: "string", required: true, description: "The new item description/subtitle (note only)." },
       { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
     handler: ({ description, itemId }: { description: string; itemId: string }) => {
       updateItemData(itemId, (prev) => {
-        if ((prev as NotesData).content !== undefined) {
-          return { ...(prev as NotesData), content: description } as NotesData;
+        if ((prev as NoteData).content !== undefined) {
+          return { ...(prev as NoteData), content: description } as NoteData;
         }
         return prev;
       });
@@ -466,8 +466,8 @@ export default function CopilotKitPage() {
   });
 
   useCopilotAction({
-    name: "setWorkItemOwnerName",
-    description: "Update field1 for an item (work/entity).",
+    name: "setProjectOwnerName",
+    description: "Update field1 for an item (project/entity).",
     available: "remote",
     parameters: [
       { name: "value", type: "string", required: true, description: "New value for field1." },
@@ -489,7 +489,7 @@ export default function CopilotKitPage() {
     description: "Create a new item.",
     available: "remote",
     parameters: [
-      { name: "type", type: "string", required: false, description: "One of: work, entity, notes, chart." },
+      { name: "type", type: "string", required: false, description: "One of: project, entity, note, chart." },
       { name: "name", type: "string", required: false, description: "Optional item name." },
     ],
     handler: ({ type, name }: { type?: string; name?: string }) => {
@@ -530,11 +530,8 @@ export default function CopilotKitPage() {
       style={{ "--copilot-kit-primary-color": "#2563eb" } as CopilotKitCSSProperties}
       className="h-screen flex flex-col"
     >
-      {/* Header */}
-      <Header running={running} addTypedItem={(t) => addItem(t)} />
-
       {/* Main Layout */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden gap-2 sm:gap-3 md:gap-4">
         {/* Main Content */}
         <main className="flex-1 overflow-auto px-4 py-6">
           <div className="flex flex-col mx-auto max-w-7xl h-full min-h-8">
@@ -569,7 +566,7 @@ export default function CopilotKitPage() {
                 </div>
               </EmptyState>
             ) : (
-            <div className="grid gap-6 md:grid-cols-2 pb-6">
+            <div className="grid gap-6 lg:grid-cols-2 pb-6">
               {(state?.items ?? initialState.items).map((item) => (
                 <article key={item.id} className="relative rounded-2xl border p-5 shadow-sm transition-colors ease-out bg-card hover:border-accent/40 focus-within:border-accent/60">
                   <button
@@ -600,17 +597,17 @@ export default function CopilotKitPage() {
         </main>
 
         {/* Chat Sidebar */}
-        <aside className="flex flex-col align-start w-80 border-l border-sidebar-border bg-sidebar shadow-lg">
+        <aside className="-order-1 flex flex-col align-start w-80 sm:w-90 md:w-100 lg:w-110 xl:w-120 border-r border-sidebar-border bg-sidebar shadow-lg">
           {/* Chat Header */}
           <div className="p-4 border-b border-sidebar-border">
             <div className="flex items-center gap-3">
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground">
-                  <Bot className="h-4 w-4" />
+                <AvatarFallback className="bg-accent/10 text-sidebar-primary-foreground">
+                  <span>🪁</span>
                 </AvatarFallback>
               </Avatar>
               <div>
-                <h3 className="font-bold text-sidebar-foreground">AI Assistant</h3>
+                <h3 className="font-bold text-sidebar-foreground">CopilotKit Canvas</h3>
                 <div className="flex items-center gap-x-1.5 text-xs text-muted-foreground">
                   <div className="inline-block size-1.5 rounded-full bg-green-500" />
                   <div>Online <span className="opacity-50 text-[90%] select-none">•</span> Ready to help</div>
@@ -626,24 +623,28 @@ export default function CopilotKitPage() {
               initial:
                 "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
             }}
+            suggestions={[
+              {
+                title: "Add a Project",
+                message: "Create a new project.",
+              },
+              {
+                title: "Add an Entity",
+                message: "Create a new entity.",
+              },
+              {
+                title: "Add a Note",
+                message: "Create a new note.",
+              },
+              {
+                title: "Add a Chart",
+                message: "Create a new chart.",
+              },
+            ]}
           />
         </aside>
       </div>
     </div>
-  );
-}
-
-function Header({ running, onAddItem, addTypedItem }: { running: boolean; onAddItem?: () => void; addTypedItem?: (t: CardType) => void }) {
-  return (
-      <header className="border-b border-border px-6 py-4 flex items-center justify-between bg-card shadow-sm">
-        <div className="flex items-center gap-4">
-          <h1 className="font-sans font-bold text-xl text-foreground tracking-tight">AG-UI Canvas</h1>
-          <div className="text-sm text-muted-foreground font-medium">Collaborative AI Workspace</div>
-        </div>
-        <div className="flex items-center gap-3">
-          <NewItemMenu onSelect={(t) => addTypedItem?.(t)} />
-        </div>
-      </header>
   );
 }
 
@@ -685,15 +686,15 @@ function CardRenderer(props: {
 }) {
   const { item, onUpdateData, onToggleTag } = props;
 
-  if (item.type === "notes") {
-    const d = item.data as NotesData;
+  if (item.type === "note") {
+    const d = item.data as NoteData;
     return (
       <div className="mt-4">
         <label className="mb-1 block text-xs font-medium text-gray-500">Field 1 (e.g., Rich Text Content)</label>
         <TextareaAutosize
           value={d.content ?? ""}
           onChange={(e) => onUpdateData(() => ({ content: e.target.value }))}
-          placeholder="Write notes or description..."
+          placeholder="Write note..."
           className="min-h-40 w-full resize-none rounded-md border bg-white/60 p-3 text-sm leading-6 outline-none placeholder:text-gray-400 transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent focus:placeholder:text-accent/65"
           minRows={6}
         />
@@ -738,9 +739,9 @@ function CardRenderer(props: {
     );
   }
 
-  if (item.type === "work") {
-    const d = item.data as WorkData;
-    const set = (partial: Partial<WorkData>) => onUpdateData((prev) => ({ ...(prev as WorkData), ...partial }));
+  if (item.type === "project") {
+    const d = item.data as ProjectData;
+    const set = (partial: Partial<ProjectData>) => onUpdateData((prev) => ({ ...(prev as ProjectData), ...partial }));
     return (
       <div className="mt-4 @container">
         {/* Field 1 full width */}
@@ -788,12 +789,12 @@ function CardRenderer(props: {
               type="button"
               className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
               onClick={() => onUpdateData((prev) => {
-                const wd = prev as WorkData;
+                const wd = prev as ProjectData;
                 const next = [
                   ...(wd.checklist ?? []),
                   { id: `c${Date.now()}`, text: "", done: false, proposed: false },
                 ];
-                return { ...wd, checklist: next } as WorkData;
+                return { ...wd, checklist: next } as ProjectData;
               })}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -812,9 +813,9 @@ function CardRenderer(props: {
                   type="checkbox"
                   checked={!!c.done}
                   onChange={(e) => onUpdateData((prev) => {
-                    const wd = prev as WorkData;
+                    const wd = prev as ProjectData;
                     const next = (wd.checklist ?? []).map((it) => it.id === c.id ? { ...it, done: e.target.checked } : it);
-                    return { ...wd, checklist: next } as WorkData;
+                    return { ...wd, checklist: next } as ProjectData;
                   })}
                   className="h-4 w-4"
                 />
@@ -822,9 +823,9 @@ function CardRenderer(props: {
                   value={c.text}
                   placeholder="Checklist item"
                   onChange={(e) => onUpdateData((prev) => {
-                    const wd = prev as WorkData;
+                    const wd = prev as ProjectData;
                     const next = (wd.checklist ?? []).map((it) => it.id === c.id ? { ...it, text: e.target.value } : it);
-                    return { ...wd, checklist: next } as WorkData;
+                    return { ...wd, checklist: next } as ProjectData;
                   })}
                   className="flex-1 rounded-md border px-2 py-1 text-sm outline-none transition-colors placeholder:text-gray-400 hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:bg-accent/10 focus:text-accent focus:placeholder:text-accent/65"
                 />
@@ -833,9 +834,9 @@ function CardRenderer(props: {
                   aria-label="Delete checklist item"
                   className="text-gray-400 hover:text-accent"
                   onClick={() => onUpdateData((prev) => {
-                    const wd = prev as WorkData;
+                    const wd = prev as ProjectData;
                     const next = (wd.checklist ?? []).filter((it) => it.id != c.id);
-                    return { ...wd, checklist: next } as WorkData;
+                    return { ...wd, checklist: next } as ProjectData;
                   })}
                 >
                   <X className="h-5 w-5 md:h-6 md:w-6" />
