@@ -55,8 +55,8 @@ def summarize_items_for_prompt(state: AgentState) -> str:
                 summary = f"field1={field1} · field2={field2} · tags=[{tags}]"
             elif itype == "note":
                 content = data.get("content", "")
-                preview = (content[:60] + "…") if len(content) > 60 else content
-                summary = f"notePreview=\"{preview}\""
+                # Include full content so the model has complete visibility for edits
+                summary = f"noteContent=\"{content}\""
             elif itype == "chart":
                 metrics = ", ".join([f"{m.get('label','')}:{m.get('value',0)}%" for m in (data.get("metrics", []) or [])])
                 summary = f"metrics=[{metrics}]"
@@ -171,6 +171,11 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     trimmed_messages = full_messages[-16:]  # keep the most recent exchanges only
 
     # 4.2 Append a final, authoritative state snapshot after chat history
+    #
+    # Ensure the latest shared state takes priority over chat history and
+    # stale tool results. This enforces state-first grounding, reduces drift, and makes
+    # precedence explicit. Optional post-tool guidance confirms successful actions
+    # (e.g., deletion) instead of re-stating absence.
     latest_state_system = SystemMessage(
         content=(
             "LATEST GROUND TRUTH (authoritative):\n"
