@@ -146,9 +146,27 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     except Exception:
         pass
 
+    # 4.1 Trim long histories to reduce stale context influence
+    full_messages = state.get("messages", []) or []
+    trimmed_messages = full_messages[-16:]  # keep the most recent exchanges only
+
+    # 4.2 Append a final, authoritative state snapshot after chat history
+    latest_state_system = SystemMessage(
+        content=(
+            "LATEST GROUND TRUTH (authoritative):\n"
+            f"- globalTitle: {global_title!s}\n"
+            f"- globalDescription: {global_description!s}\n"
+            f"- projects:\n{projects_summary}\n\n"
+            "Resolution policy: If ANY prior message mentions values that conflict with the above,\n"
+            "those earlier mentions are obsolete and MUST be ignored.\n"
+            "When asked 'what is it now', ALWAYS read from this LATEST GROUND TRUTH.\n"
+        )
+    )
+
     response = await model_with_tools.ainvoke([
         system_message,
-        *state["messages"],
+        *trimmed_messages,
+        latest_state_system,
     ], config)
 
     # only route to tool node if tool is not in the tools list
