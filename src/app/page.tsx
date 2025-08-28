@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PanelLeftClose, PanelLeftOpen, Users, Plus } from "lucide-react"
 import { Bot } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 
 type WorkItemType = "Task" | "Bug" | "Research";
 type Priority = "P0" | "P1" | "P2" | "P3";
@@ -61,33 +62,8 @@ interface AgentState {
   projects: Project[];
 }
 
-const initialProjectId = "0001";
 const initialState: AgentState = {
-  projects: [
-    {
-      id: initialProjectId,
-      name: "Example Project",
-      description:
-        "This is your project description. Summarize the goal and key context here. The agent and you will co-edit fields below.",
-      workItem: {
-        id: "WI1234",
-        title: "Draft initial plan",
-        type: "Task",
-        priority: "P2",
-        status: "Not Started",
-        owner: { id: "u_1", name: "Unassigned", avatarUrl: "" },
-        dueDate: "",
-        tags: ["planning"],
-        checklist: [
-          { id: "c1", text: "Define scope", done: false, proposed: false },
-          { id: "c2", text: "List milestones", done: false, proposed: false },
-        ],
-        description:
-          "Write a short overview and proposed steps. The agent can propose edits you can accept or reject.",
-        links: [],
-      },
-    },
-  ],
+  projects: [],
 };
 
 export default function CopilotKitPage() {
@@ -421,16 +397,9 @@ export default function CopilotKitPage() {
         {/* Main Content */}
         <main className="flex-1 overflow-auto px-4 py-6">
           <div className="mx-auto max-w-6xl">
-            <div className="mb-4 flex items-center justify-between">
-              <span className="text-sm text-gray-600">Projects</span>
-              <button
-                onClick={() => addProject()}
-                className="rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50"
-              >
-                New Project
-              </button>
-            </div>
-
+            {(state?.projects ?? []).length === 0 ? (
+              <EmptyState onAddProject={() => addProject()} />
+            ) : (
             <div className="grid gap-6 md:grid-cols-2">
               {(state?.projects ?? initialState.projects).map((project) => (
                 <div key={project.id} className="rounded-2xl border p-5 shadow-sm">
@@ -488,6 +457,7 @@ export default function CopilotKitPage() {
                 </div>
               ))}
             </div>
+            )}
           </div>
         </main>
 
