@@ -4,6 +4,7 @@ import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAddition
 import { CopilotKitCSSProperties, CopilotChat } from "@copilotkit/react-ui";
 import { useCallback, useEffect } from "react";
 import type React from "react";
+import TextareaAutosize from "react-textarea-autosize";
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PanelLeftClose, PanelLeftOpen, Users, Plus } from "lucide-react"
@@ -76,10 +77,14 @@ export default function CopilotKitPage() {
     initialState,
   });
 
+  
+
   useEffect(() => {
     // eslint-disable-next-line no-console
     console.log("[CoAgent state updated]", state);
   }, [JSON.stringify(state)]);
+
+  
 
   useCoAgentStateRender<AgentState>({
     name: "sample_agent",
@@ -436,19 +441,23 @@ export default function CopilotKitPage() {
         <main className="flex-1 overflow-auto px-4 py-6">
           <div className="flex flex-col mx-auto max-w-7xl h-full min-h-8">
             {/* Global Title & Description */}
-            <div className="rounded-2xl border p-5 shadow-sm mb-6">
+            <div className="mb-6">
               <input
                 value={state?.globalTitle ?? initialState.globalTitle}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setState((prev) => ({ ...(prev ?? initialState), globalTitle: e.target.value }))}
-                placeholder="Page title"
-                className="w-full appearance-none text-2xl font-semibold outline-none placeholder:text-gray-400"
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setState((prev) => ({ ...(prev ?? initialState), globalTitle: e.target.value }))
+                }
+                placeholder="Canvas title..."
+                className="w-full bg-transparent text-2xl font-semibold outline-none placeholder:text-gray-400 border-0 border-b border-border focus:border-gray-400 rounded-none px-0 pb-1"
               />
-              <textarea
+              <TextareaAutosize
                 value={state?.globalDescription ?? initialState.globalDescription}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setState((prev) => ({ ...(prev ?? initialState), globalDescription: e.target.value }))}
-                placeholder="High-level description for this workspace."
-                className="mt-3 max-h-56 w-full resize-y overflow-auto rounded-lg border bg-white/60 p-3 text-sm leading-6 outline-none placeholder:text-gray-400"
-                rows={4}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setState((prev) => ({ ...(prev ?? initialState), globalDescription: e.target.value }))
+                }
+                minRows={1}
+                placeholder="Canvas description..."
+                className="mt-2 w-full bg-transparent text-sm leading-6 outline-none placeholder:text-gray-400 border-0 border-b border-border focus:border-gray-400 rounded-none px-0 pb-1 resize-none overflow-hidden"
               />
             </div>
             {(state?.projects ?? []).length === 0 ? (
