@@ -302,6 +302,15 @@ export default function CopilotKitPage() {
     [setState]
   );
 
+  const deleteItem = useCallback((itemId: string) => {
+    setState((prev) => {
+      const base = prev ?? initialState;
+      const items: Item[] = (base.items ?? []).filter((p) => p.id !== itemId);
+      const activeItemId = base.activeItemId === itemId ? null : base.activeItemId;
+      return { ...base, items, activeItemId } as AgentState;
+    });
+  }, [setState]);
+
   const setChecklistItem = useCallback(
     (itemId: string, id: string, updates: Partial<ChecklistItem>) => {
       updateItemData(itemId, (prev) => prev);
@@ -486,6 +495,19 @@ export default function CopilotKitPage() {
     },
   });
 
+  // Frontend action: delete an item by id
+  useCopilotAction({
+    name: "deleteItem",
+    description: "Delete an item by id.",
+    available: "remote",
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target item id." },
+    ],
+    handler: ({ itemId }: { itemId: string }) => {
+      deleteItem(itemId);
+    },
+  });
+
   const titleClasses = cn(
     /* base styles */
     "w-full outline-none rounded-md px-2 py-1",
@@ -542,9 +564,17 @@ export default function CopilotKitPage() {
                 </div>
               </EmptyState>
             ) : (
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-6 md:grid-cols-2 pb-6">
               {(state?.items ?? initialState.items).map((item) => (
-                <article key={item.id} className="rounded-2xl border p-5 shadow-sm transition-all ease-out bg-card hover:border-accent/40 focus-within:border-accent/60 last-of-type:mb-6">
+                <article key={item.id} className="relative rounded-2xl border p-5 shadow-sm transition-colors ease-out bg-card hover:border-accent/40 focus-within:border-accent/60">
+                  <button
+                    type="button"
+                    aria-label="Delete card"
+                    className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white text-gray-400 hover:bg-accent/10 hover:text-accent transition-colors"
+                    onClick={() => deleteItem(item.id)}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                   <ItemHeader
                     name={item.name}
                     subtitle={item.subtitle}
@@ -707,7 +737,7 @@ function CardRenderer(props: {
     const d = item.data as WorkData;
     const set = (partial: Partial<WorkData>) => onUpdateData((prev) => ({ ...(prev as WorkData), ...partial }));
     return (
-      <div className="mt-4">
+      <div className="mt-4 @container">
         {/* Field 1 full width */}
         <div className="mb-3">
           <label className="mb-1 block text-xs font-medium text-gray-500">Field 1</label>
@@ -719,8 +749,8 @@ function CardRenderer(props: {
           />
         </div>
         {/* Row 2 split */}
-        <div className="grid gap-3 md:grid-cols-2">
-          <div>
+        <div className="contents @xs:grid gap-3 md:grid-cols-2">
+          <div className="@max-xs:mb-3">
             <label className="mb-1 block text-xs font-medium text-gray-500">Field 2</label>
             <select
               value={d.field2}
@@ -767,7 +797,7 @@ function CardRenderer(props: {
           </div>
           <div className="space-y-2">
             {(!d.checklist || d.checklist.length === 0) && (
-              <div className="grid place-items-center py-1.75 text-xs text-muted-foreground">
+              <div className="grid place-items-center py-1.75 text-xs text-muted-foreground text-pretty">
                 Nothing here yet. Add a checklist item to get started.
               </div>
             )}
