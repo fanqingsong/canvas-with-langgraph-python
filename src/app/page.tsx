@@ -48,12 +48,12 @@ interface WorkItem {
   links: LinkItem[];
 }
 
-interface ProjectInfo {
+interface ItemInfo {
   name: string;
   description: string;
 }
 
-interface Project {
+interface Item {
   id: string;
   name: string;
   description: string;
@@ -61,15 +61,17 @@ interface Project {
 }
 
 interface AgentState {
-  projects: Project[];
+  items: Item[];
   globalTitle: string;
   globalDescription: string;
+  activeItemId: string | null;
 }
 
 const initialState: AgentState = {
-  projects: [],
+  items: [],
   globalTitle: "",
   globalDescription: "",
+  activeItemId: null,
 };
 
 export default function CopilotKitPage() {
@@ -90,13 +92,13 @@ export default function CopilotKitPage() {
   useCoAgentStateRender<AgentState>({
     name: "sample_agent",
     render: ({ state }) => {
-      const projects = state?.projects ?? initialState.projects;
+      const items = state?.items ?? initialState.items;
       const globalTitle = state?.globalTitle ?? initialState.globalTitle;
       const globalDescription = state?.globalDescription ?? initialState.globalDescription;
       return (
         <pre className="whitespace-pre-wrap text-xs text-violet-600 font-mono w-full overflow-hidden">
           {JSON.stringify({
-            projects,
+            items,
             globalTitle,
             globalDescription,
           }, null, 2)}
@@ -108,39 +110,39 @@ export default function CopilotKitPage() {
   // Strengthen grounding: always prefer shared state over chat history
   useCopilotAdditionalInstructions({
     instructions: (() => {
-      const projects = state?.projects ?? initialState.projects;
+      const items = state?.items ?? initialState.items;
       const gTitle = state?.globalTitle ?? "";
       const gDesc = state?.globalDescription ?? "";
-      const summary = projects
+      const summary = items
         .slice(0, 5)
         .map((p) => `id=${p.id} • name=${p.name} • owner=${p.workItem.owner.name}`)
         .join("\n");
       return [
         "ALWAYS ANSWER FROM SHARED STATE (GROUND TRUTH).",
-        "If a command does not specify which project to change, ask the user to clarify before proceeding.",
+        "If a command does not specify which item to change, ask the user to clarify before proceeding.",
         `Global Title: ${gTitle || "(none)"}`,
         `Global Description: ${gDesc || "(none)"}`,
-        "Projects (sample):",
+        "Items (sample):",
         summary || "(none)",
       ].join("\n");
     })(),
   });
 
-  // HITL: dropdown selector for project choice using LangGraph interrupt
+  // HITL: dropdown selector for item choice using LangGraph interrupt
   useLangGraphInterrupt({
     enabled: ({ eventValue }) => {
       try {
-        return typeof eventValue === "object" && eventValue?.type === "choose_project";
+        return typeof eventValue === "object" && eventValue?.type === "choose_item";
       } catch {
         return false;
       }
     },
     render: ({ event, resolve }) => {
-      const projects = state?.projects ?? initialState.projects;
-      if (!projects.length) {
+      const items = state?.items ?? initialState.items;
+      if (!items.length) {
         return (
           <div className="rounded-md border bg-white p-4 text-sm shadow">
-            <p>No projects available.</p>
+            <p>No items available.</p>
             <button
               className="mt-3 rounded border px-3 py-1"
               onClick={() => resolve("")}
@@ -150,11 +152,11 @@ export default function CopilotKitPage() {
           </div>
         );
       }
-      let selectedId = projects[0].id;
+      let selectedId = items[0].id;
       return (
         <div className="rounded-md border bg-white p-4 text-sm shadow">
-          <p className="mb-2 font-medium">Select a project</p>
-          <p className="mb-3 text-xs text-gray-600">{(event?.value as any)?.content ?? "Which project should I use?"}</p>
+          <p className="mb-2 font-medium">Select an item</p>
+          <p className="mb-3 text-xs text-gray-600">{(event?.value as any)?.content ?? "Which item should I use?"}</p>
           <select
             className="w-full rounded border px-2 py-1"
             defaultValue={selectedId}
@@ -162,7 +164,7 @@ export default function CopilotKitPage() {
               selectedId = e.target.value;
             }}
           >
-            {projects.map((p) => (
+            {items.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} ({p.id})
               </option>
@@ -179,7 +181,7 @@ export default function CopilotKitPage() {
               className="rounded border bg-blue-600 px-3 py-1 text-white"
               onClick={() => resolve(selectedId)}
             >
-              Use project
+              Use item
             </button>
           </div>
         </div>
@@ -187,54 +189,54 @@ export default function CopilotKitPage() {
     },
   });
 
-  const updateProject = useCallback(
-    (projectId: string, updates: Partial<Project>) => {
+  const updateItem = useCallback(
+    (itemId: string, updates: Partial<Item>) => {
       setState((prev) => {
         const base = prev ?? initialState;
-        const projects: Project[] = base.projects ?? [];
-        const nextProjects = projects.map((p) =>
-          p.id === projectId ? { ...p, ...updates } : p
+        const items: Item[] = base.items ?? [];
+        const nextItems = items.map((p) =>
+          p.id === itemId ? { ...p, ...updates } : p
         );
-        return { ...base, projects: nextProjects } as AgentState;
+        return { ...base, items: nextItems } as AgentState;
       });
     },
     [setState]
   );
 
   const updateWorkItem = useCallback(
-    (projectId: string, updates: Partial<WorkItem>) => {
+    (itemId: string, updates: Partial<WorkItem>) => {
       setState((prev) => {
         const base = prev ?? initialState;
-        const projects: Project[] = base.projects ?? [];
-        const nextProjects = projects.map((p) =>
-          p.id === projectId ? { ...p, workItem: { ...p.workItem, ...updates } } : p
+        const items: Item[] = base.items ?? [];
+        const nextItems = items.map((p) =>
+          p.id === itemId ? { ...p, workItem: { ...p.workItem, ...updates } } : p
         );
-        return { ...base, projects: nextProjects } as AgentState;
+        return { ...base, items: nextItems } as AgentState;
       });
     },
     [setState]
   );
 
   const setChecklistItem = useCallback(
-    (projectId: string, id: string, updates: Partial<ChecklistItem>) => {
+    (itemId: string, id: string, updates: Partial<ChecklistItem>) => {
       setState((prev) => {
         const base = prev ?? initialState;
-        const projects: Project[] = base.projects ?? [];
-        const nextProjects = projects.map((p) => {
-          if (p.id !== projectId) return p;
+        const items: Item[] = base.items ?? [];
+        const nextItems = items.map((p) => {
+          if (p.id !== itemId) return p;
           const nextChecklist = p.workItem.checklist.map((item) =>
             item.id === id ? { ...item, ...updates } : item
           );
           return { ...p, workItem: { ...p.workItem, checklist: nextChecklist } };
         });
-        return { ...base, projects: nextProjects } as AgentState;
+        return { ...base, items: nextItems } as AgentState;
       });
     },
     [setState]
   );
 
   const addChecklistItem = useCallback(
-    (projectId: string, text: string) => {
+    (itemId: string, text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
       setState((prev) => {
@@ -245,23 +247,23 @@ export default function CopilotKitPage() {
           done: false,
           proposed: false,
         };
-        const nextProjects = (base.projects ?? []).map((p) =>
-          p.id === projectId
+        const nextItems = (base.items ?? []).map((p: Item) =>
+          p.id === itemId
             ? { ...p, workItem: { ...p.workItem, checklist: [...p.workItem.checklist, next] } }
             : p
         );
-        return { ...base, projects: nextProjects } as AgentState;
+        return { ...base, items: nextItems } as AgentState;
       });
     },
     [setState]
   );
 
   const removeChecklistItem = useCallback(
-    (projectId: string, id: string) => {
+    (itemId: string, id: string) => {
       setState((prev) => {
         const base = prev ?? initialState;
-        const nextProjects = (base.projects ?? []).map((p) =>
-          p.id === projectId
+        const nextItems = (base.items ?? []).map((p: Item) =>
+          p.id === itemId
             ? {
                 ...p,
                 workItem: {
@@ -271,49 +273,49 @@ export default function CopilotKitPage() {
               }
             : p
         );
-        return { ...base, projects: nextProjects } as AgentState;
+        return { ...base, items: nextItems } as AgentState;
       });
     },
     [setState]
   );
 
   const addTag = useCallback(
-    (projectId: string, tag: string) => {
+    (itemId: string, tag: string) => {
       const next = tag.trim();
       if (!next) return;
       setState((prev) => {
         const base = prev ?? initialState;
-        const nextProjects = (base.projects ?? []).map((p) => {
-          if (p.id !== projectId) return p;
+        const nextItems = (base.items ?? []).map((p: Item) => {
+          if (p.id !== itemId) return p;
           if (p.workItem.tags.includes(next)) return p;
           return { ...p, workItem: { ...p.workItem, tags: [...p.workItem.tags, next] } };
         });
-        return { ...base, projects: nextProjects } as AgentState;
+        return { ...base, items: nextItems } as AgentState;
       });
     },
     [setState]
   );
 
   const removeTag = useCallback(
-    (projectId: string, tag: string) => {
+    (itemId: string, tag: string) => {
       setState((prev) => {
         const base = prev ?? initialState;
-        const nextProjects = (base.projects ?? []).map((p) =>
-          p.id === projectId
+        const nextItems = (base.items ?? []).map((p: Item) =>
+          p.id === itemId
             ? { ...p, workItem: { ...p.workItem, tags: p.workItem.tags.filter((t) => t !== tag) } }
             : p
         );
-        return { ...base, projects: nextProjects } as AgentState;
+        return { ...base, items: nextItems } as AgentState;
       });
     },
     [setState]
   );
 
-  const addProject = useCallback((name?: string, description?: string) => {
+  const addItem = useCallback((name?: string, description?: string) => {
     const id = "prj_" + Date.now().toString(36);
-    const project: Project = {
+    const item: Item = {
       id,
-      name: name && name.trim() ? name.trim() : "Untitled Project",
+      name: name && name.trim() ? name.trim() : "Untitled Item",
       description:
         description && description.trim()
           ? description.trim()
@@ -334,23 +336,23 @@ export default function CopilotKitPage() {
     };
     setState((prev) => {
       const base = prev ?? initialState;
-      const nextProjects = [...(base.projects ?? []), project];
-      return { ...base, projects: nextProjects, activeProjectId: id } as AgentState;
+      const nextItems = [...(base.items ?? []), item];
+      return { ...base, items: nextItems, activeItemId: id } as AgentState;
     });
     return id;
   }, [setState]);
 
-  const setActiveProject = useCallback((projectId: string) => {
+  const setActiveItem = useCallback((itemId: string) => {
     setState((prev) => {
       const base = prev ?? initialState;
-      return { ...base, activeProjectId: projectId } as AgentState;
+      return { ...base, activeItemId: itemId } as AgentState;
     });
   }, [setState]);
 
   // Frontend Actions (exposed as tools to the agent via CopilotKit)
   useCopilotAction({
     name: "setGlobalTitle",
-    description: "Set the global title (outside of projects).",
+    description: "Set the global title (outside of items).",
     available: "remote",
     parameters: [
       { name: "title", type: "string", required: true, description: "The new global title." },
@@ -362,7 +364,7 @@ export default function CopilotKitPage() {
 
   useCopilotAction({
     name: "setGlobalDescription",
-    description: "Set the global description (outside of projects).",
+    description: "Set the global description (outside of items).",
     available: "remote",
     parameters: [
       { name: "description", type: "string", required: true, description: "The new global description." },
@@ -372,58 +374,58 @@ export default function CopilotKitPage() {
     },
   });
 
-  // Frontend Actions (project-scoped)
+  // Frontend Actions (item-scoped)
   useCopilotAction({
-    name: "setProjectName",
-    description: "Set a project's name.",
+    name: "setItemName",
+    description: "Set an item's name.",
     available: "remote",
     parameters: [
-      { name: "name", type: "string", required: true, description: "The new project name." },
-      { name: "projectId", type: "string", required: true, description: "Target project id." },
+      { name: "name", type: "string", required: true, description: "The new item name." },
+      { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
-    handler: ({ name, projectId }: { name: string; projectId: string }) => {
-      updateProject(projectId, { name });
+    handler: ({ name, itemId }: { name: string; itemId: string }) => {
+      updateItem(itemId, { name });
     },
   });
 
   useCopilotAction({
-    name: "setProjectDescription",
-    description: "Set a project's description.",
+    name: "setItemDescription",
+    description: "Set an item's description.",
     available: "remote",
     parameters: [
-      { name: "description", type: "string", required: true, description: "The new project description." },
-      { name: "projectId", type: "string", required: true, description: "Target project id." },
+      { name: "description", type: "string", required: true, description: "The new item description." },
+      { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
-    handler: ({ description, projectId }: { description: string; projectId: string }) => {
-      updateProject(projectId, { description });
+    handler: ({ description, itemId }: { description: string; itemId: string }) => {
+      updateItem(itemId, { description });
     },
   });
 
   useCopilotAction({
     name: "setWorkItemOwnerName",
-    description: "Update the owner name for a project's work item.",
+    description: "Update the owner name for an item's work item.",
     available: "remote",
     parameters: [
       { name: "name", type: "string", required: true, description: "Full name of the owner." },
-      { name: "projectId", type: "string", required: true, description: "Target project id." },
+      { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
-    handler: ({ name, projectId }: { name: string; projectId: string }) => {
-      const project = (state?.projects ?? initialState.projects).find((p) => p.id === projectId) ?? initialState.projects[0];
-      const currentOwner: Owner = project.workItem.owner;
-      updateWorkItem(projectId, { owner: { ...currentOwner, name } });
+    handler: ({ name, itemId }: { name: string; itemId: string }) => {
+      const found = (state?.items ?? initialState.items).find((p) => p.id === itemId);
+      const currentOwner: Owner = found ? found.workItem.owner : { id: "u_1", name: "Unassigned", avatarUrl: "" };
+      updateWorkItem(itemId, { owner: { ...currentOwner, name } });
     },
   });
 
   useCopilotAction({
-    name: "createProject",
-    description: "Create a new project.",
+    name: "createItem",
+    description: "Create a new item.",
     available: "remote",
     parameters: [
-      { name: "name", type: "string", required: false, description: "Optional project name." },
-      { name: "description", type: "string", required: false, description: "Optional project description." },
+      { name: "name", type: "string", required: false, description: "Optional item name." },
+      { name: "description", type: "string", required: false, description: "Optional item description." },
     ],
     handler: ({ name, description }: { name?: string; description?: string }) => {
-      addProject(name, description);
+      addItem(name, description);
     },
   });
 
@@ -431,8 +433,9 @@ export default function CopilotKitPage() {
     /* base styles */
     "w-full outline-none rounded-md px-2 py-1",
     "bg-transparent placeholder:text-gray-400",
+    "ring-1 ring-transparent transition-all ease-out",
     /* hover styles */
-    "hover:ring-1 hover:ring-border",
+    "hover:ring-border",
     /* focus styles */
     "focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10",
     "focus:shadow-accent focus:placeholder:text-accent/65 focus:text-accent",
@@ -444,7 +447,7 @@ export default function CopilotKitPage() {
       className="h-screen flex flex-col"
     >
       {/* Header */}
-      <Header running={running} onAddProject={() => addProject()} />
+      <Header running={running} onAddItem={() => addItem()} />
 
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden">
@@ -471,60 +474,60 @@ export default function CopilotKitPage() {
                 className={cn(titleClasses, "mt-2 text-sm leading-6 resize-none overflow-hidden")}
               />
             </div>
-            {(state?.projects ?? []).length === 0 ? (
-              <EmptyState className="flex-1" onAddProject={() => addProject()} />
+            {(state?.items ?? []).length === 0 ? (
+              <EmptyState className="flex-1" onAddItem={() => addItem()} />
             ) : (
             <div className="grid gap-6 md:grid-cols-2">
-              {(state?.projects ?? initialState.projects).map((project) => (
-                <div key={project.id} className="rounded-2xl border p-5 shadow-sm">
+              {(state?.items ?? initialState.items).map((item) => (
+                <div key={item.id} className="rounded-2xl border p-5 shadow-sm">
                   <div className="mb-3 flex items-center justify-between gap-2">
-                    <span className="text-xs text-gray-500">{project.id}</span>
+                    <span className="text-xs text-gray-500">{item.id}</span>
                   </div>
 
-                  <ProjectHeader
-                    name={project.name}
-                    description={project.description}
+                  <ItemHeader
+                    name={item.name}
+                    description={item.description}
                     onNameChange={(v) => {
-                      updateProject(project.id, { name: v });
+                      updateItem(item.id, { name: v });
                     }}
                     onDescriptionChange={(v) => {
-                      updateProject(project.id, { description: v });
+                      updateItem(item.id, { description: v });
                     }}
                   />
 
                   <div className="mt-6">
                     <WorkItemCard
-                      item={project.workItem}
+                      item={item.workItem}
                       onChange={(updates) => {
-                        const beforeOwner = project.workItem.owner.name;
-                        updateWorkItem(project.id, updates);
+                        const beforeOwner = item.workItem.owner.name;
+                        updateWorkItem(item.id, updates);
                       }}
                       onSetChecklistItem={(id, updates) => {
-                        updateWorkItem(project.id, {
-                          checklist: project.workItem.checklist.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+                        updateWorkItem(item.id, {
+                          checklist: item.workItem.checklist.map((c) => (c.id === id ? { ...c, ...updates } : c)),
                         });
                       }}
                       onAddChecklistItem={(text) => {
                         const trimmed = text.trim();
                         if (!trimmed) return;
-                        updateWorkItem(project.id, {
+                        updateWorkItem(item.id, {
                           checklist: [
-                            ...project.workItem.checklist,
+                            ...item.workItem.checklist,
                             { id: `c${Date.now()}`, text: trimmed, done: false, proposed: false },
                           ],
                         });
                       }}
                       onRemoveChecklistItem={(id) => {
-                        updateWorkItem(project.id, {
-                          checklist: project.workItem.checklist.filter((c) => c.id !== id),
+                        updateWorkItem(item.id, {
+                          checklist: item.workItem.checklist.filter((c) => c.id !== id),
                         });
                       }}
                       onAddTag={(tag) => {
-                        if (project.workItem.tags.includes(tag.trim())) return;
-                        updateWorkItem(project.id, { tags: [...project.workItem.tags, tag.trim()] });
+                        if (item.workItem.tags.includes(tag.trim())) return;
+                        updateWorkItem(item.id, { tags: [...item.workItem.tags, tag.trim()] });
                       }}
                       onRemoveTag={(tag) => {
-                        updateWorkItem(project.id, { tags: project.workItem.tags.filter((t) => t !== tag) });
+                        updateWorkItem(item.id, { tags: item.workItem.tags.filter((t) => t !== tag) });
                       }}
                     />
                   </div>
@@ -569,7 +572,7 @@ export default function CopilotKitPage() {
   );
 }
 
-function Header({ running, onAddProject }: { running: boolean; onAddProject: () => void }) {
+function Header({ running, onAddItem }: { running: boolean; onAddItem: () => void }) {
   return (
       <header className="border-b border-border px-6 py-4 flex items-center justify-between bg-card shadow-sm">
         <div className="flex items-center gap-4">
@@ -577,16 +580,16 @@ function Header({ running, onAddProject }: { running: boolean; onAddProject: () 
           <div className="text-sm text-muted-foreground font-medium">Collaborative AI Workspace</div>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm" className="gap-2 font-medium bg-transparent" onClick={onAddProject}>
+          <Button variant="outline" size="sm" className="gap-2 font-medium bg-transparent" onClick={onAddItem}>
             <Plus className="h-4 w-4" />
-            New Todo
+            Add Item
           </Button>
         </div>
       </header>
   );
 }
 
-function ProjectHeader(props: {
+function ItemHeader(props: {
   name: string;
   description: string;
   onNameChange: (value: string) => void;
@@ -601,14 +604,14 @@ function ProjectHeader(props: {
         value={name}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => onNameChange(e.target.value)}
         onBlur={(e: React.FocusEvent<HTMLInputElement>) => onNameCommit?.(e.target.value)}
-        placeholder="Project name"
+        placeholder="Item name"
         className="w-full appearance-none text-2xl font-semibold outline-none placeholder:text-gray-400"
       />
       <textarea
         value={description}
         onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onDescriptionChange(e.target.value)}
         onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => onDescriptionCommit?.(e.target.value)}
-        placeholder="Describe the project goals, constraints, and key context."
+        placeholder="Describe this item."
         className="mt-3 max-h-56 w-full resize-y overflow-auto rounded-lg border bg-white/60 p-3 text-sm leading-6 outline-none placeholder:text-gray-400"
         rows={4}
       />

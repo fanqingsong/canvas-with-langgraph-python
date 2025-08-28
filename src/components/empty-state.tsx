@@ -9,18 +9,18 @@ export function EmptyState(props: {
   title?: string;
   description?: string;
   className?: string;
-  onAddProject: () => void;
+  onAddItem: () => void;
 }) {
-  const { title = "No projects yet", description = "Create your first project to get started.", onAddProject } = props;
+  const { title = "Nothing here yet", description = "Create your first item to get started.", onAddItem } = props;
   return (
     <div className={cn("grid place-items-center justify-center rounded-2xl p-8 bg-border/50 border-foreground/25 border-dashed border-2", props.className)}>
       <div className="mx-auto max-w-lg text-center">
         <h2 className="text-lg font-semibold text-foreground">{title}</h2>
         <p className="mt-2 text-sm text-muted-foreground">{description}</p>
         <div className="mt-6 flex justify-center">
-          <Button variant="outline" size="sm" className="gap-2 font-medium" onClick={onAddProject}>
+          <Button variant="outline" size="sm" className="gap-2 font-medium" onClick={onAddItem}>
             <Plus className="h-4 w-4" />
-            New Project
+            Add Item
           </Button>
         </div>
       </div>
