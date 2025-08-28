@@ -508,10 +508,6 @@ export default function CopilotKitPage() {
             <div className="grid gap-6 md:grid-cols-2">
               {(state?.items ?? initialState.items).map((item) => (
                 <div key={item.id} className="rounded-2xl border p-5 shadow-sm">
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <span className="text-xs text-gray-500">{item.id}</span>
-                  </div>
-
                   <ItemHeader
                     name={item.name}
                     description={""}
