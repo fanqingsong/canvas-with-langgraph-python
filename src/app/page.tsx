@@ -4,7 +4,9 @@ import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAddition
 import { CopilotKitCSSProperties, CopilotChat } from "@copilotkit/react-ui";
 import { useCallback, useEffect } from "react";
 import type React from "react";
+import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { PanelLeftClose, PanelLeftOpen, Users, Plus } from "lucide-react"
 import { Bot } from "lucide-react";
 
 type WorkItemType = "Task" | "Bug" | "Research";
@@ -490,7 +492,7 @@ export default function CopilotKitPage() {
         </main>
 
         {/* Chat Sidebar */}
-        <aside className="flex flex-col align-start animate-in fade-in slide-in-from-right duration-500 bg-white">
+        <aside className="flex flex-col align-start w-80 border-l border-sidebar-border bg-sidebar shadow-lg">
           {/* Chat Header */}
           <div className="p-4 border-b border-sidebar-border">
             <div className="flex items-center gap-3">
@@ -510,9 +512,9 @@ export default function CopilotKitPage() {
           </div>
           {/* Chat Content */}
           <CopilotChat
-            className="flex-1 overflow-auto !w-[320px]"
+            className="flex-1 overflow-auto w-full"
             labels={{
-              title: "Agent ABC",
+              title: "Agent",
               initial:
                 "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
             }}
@@ -525,15 +527,18 @@ export default function CopilotKitPage() {
 
 function Header({ running }: { running: boolean }) {
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-white/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-        <div className="flex items-center gap-2">
-          <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: running ? "#22c55e" : "#eab308" }} />
-          <span className="text-sm font-medium">AG-UI Canvas</span>
+      <header className="border-b border-border px-6 py-4 flex items-center justify-between bg-card shadow-sm">
+        <div className="flex items-center gap-4">
+          <h1 className="font-sans font-bold text-xl text-foreground tracking-tight">AG-UI Canvas</h1>
+          <div className="text-sm text-muted-foreground font-medium">Collaborative AI Workspace</div>
         </div>
-        <span className="text-xs text-gray-500">sample_agent</span>
-      </div>
-    </header>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" className="gap-2 font-medium bg-transparent" onClick={handleAddTodo}>
+            <Plus className="h-4 w-4" />
+            New Todo
+          </Button>
+        </div>
+      </header>
   );
 }
 
