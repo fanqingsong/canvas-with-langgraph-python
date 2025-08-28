@@ -503,7 +503,7 @@ export default function CopilotKitPage() {
               />
             </div>
             {(state?.items ?? []).length === 0 ? (
-              <EmptyState className="flex-1" onAddItem={() => addItem()} />
+              <EmptyState className="flex-1" onAddItem={() => addItem()} onAddTypedItem={(t) => addItem(t)} />
             ) : (
             <div className="grid gap-6 md:grid-cols-2">
               {(state?.items ?? initialState.items).map((item) => (
@@ -578,7 +578,7 @@ function Header({ running, onAddItem, addTypedItem }: { running: boolean; onAddI
                 New…
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuContent align="end" className="w-40 bg-background">
               <DropdownMenuItem onClick={() => addTypedItem?.("work")}>Work item</DropdownMenuItem>
               <DropdownMenuItem onClick={() => addTypedItem?.("entity")}>Entity</DropdownMenuItem>
               <DropdownMenuItem onClick={() => addTypedItem?.("notes")}>Notes</DropdownMenuItem>
