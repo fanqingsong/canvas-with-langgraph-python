@@ -396,7 +396,7 @@ export default function CopilotKitPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Main Content */}
         <main className="flex-1 overflow-auto px-4 py-6">
-          <div className="mx-auto max-w-6xl">
+          <div className="mx-auto max-w-7xl h-full min-h-8">
             {(state?.projects ?? []).length === 0 ? (
               <EmptyState onAddProject={() => addProject()} />
             ) : (
