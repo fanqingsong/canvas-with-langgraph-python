@@ -725,7 +725,8 @@ function CardRenderer(props: {
             <select
               value={d.field2}
               onChange={(e) => set({ field2: e.target.value })}
-              className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent"
+              required
+              className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent invalid:text-gray-400"
             >
               <option value="">Select...</option>
               {["Option A", "Option B", "Option C"].map((opt) => (
@@ -739,7 +740,8 @@ function CardRenderer(props: {
               type="date"
               value={d.field3Date}
               onChange={(e) => set({ field3Date: e.target.value })}
-              className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent"
+              required
+              className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent invalid:text-gray-400"
             />
           </div>
         </div>
@@ -830,7 +832,8 @@ function CardRenderer(props: {
         <select
           value={e.field2}
           onChange={(ev) => setEntity({ field2: ev.target.value })}
-          className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent"
+          required
+          className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent invalid:text-gray-400"
         >
           <option value="">Select...</option>
           {["Option A", "Option B", "Option C"].map((opt) => (
