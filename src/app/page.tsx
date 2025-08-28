@@ -7,7 +7,7 @@ import type React from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { PanelLeftClose, PanelLeftOpen, Users, Plus } from "lucide-react"
+import { PanelLeftClose, PanelLeftOpen, Users, Plus, X } from "lucide-react"
 import { Bot } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
@@ -336,11 +336,7 @@ export default function CopilotKitPage() {
           field1: "",
           field2: "",
           field3Date: "",
-          checklist: [
-            { id: `c${Date.now()}-1`, text: "Placeholder item 1", done: false, proposed: false },
-            { id: `c${Date.now()}-2`, text: "Placeholder item 2", done: false, proposed: false },
-            { id: `c${Date.now()}-3`, text: "Placeholder item 3", done: false, proposed: false },
-          ],
+          checklist: [],
         } as WorkData;
       case "entity":
         return {
@@ -749,8 +745,30 @@ function CardRenderer(props: {
         </div>
         {/* Checklist */}
         <div className="mt-4">
-          <label className="mb-1 block text-xs font-medium text-gray-500">Checklist</label>
+          <div className="mb-2 flex items-center justify-between">
+            <label className="block text-xs font-medium text-gray-500">Checklist</label>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+              onClick={() => onUpdateData((prev) => {
+                const wd = prev as WorkData;
+                const next = [
+                  ...(wd.checklist ?? []),
+                  { id: `c${Date.now()}`, text: "", done: false, proposed: false },
+                ];
+                return { ...wd, checklist: next } as WorkData;
+              })}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add new
+            </button>
+          </div>
           <div className="space-y-2">
+            {(!d.checklist || d.checklist.length === 0) && (
+              <div className="grid place-items-center py-1.75 text-xs text-muted-foreground">
+                Nothing here yet. Add a checklist item to get started.
+              </div>
+            )}
             {(d.checklist ?? []).map((c) => (
               <div key={c.id} className="flex items-center gap-2">
                 <input
@@ -765,13 +783,26 @@ function CardRenderer(props: {
                 />
                 <input
                   value={c.text}
+                  placeholder="Checklist item"
                   onChange={(e) => onUpdateData((prev) => {
                     const wd = prev as WorkData;
                     const next = (wd.checklist ?? []).map((it) => it.id === c.id ? { ...it, text: e.target.value } : it);
                     return { ...wd, checklist: next } as WorkData;
                   })}
-                  className="flex-1 rounded-md border px-2 py-1 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:bg-accent/10 focus:text-accent"
+                  className="flex-1 rounded-md border px-2 py-1 text-sm outline-none transition-colors placeholder:text-gray-400 hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:bg-accent/10 focus:text-accent focus:placeholder:text-accent/65"
                 />
+                <button
+                  type="button"
+                  aria-label="Delete checklist item"
+                  className="text-gray-400 hover:text-accent"
+                  onClick={() => onUpdateData((prev) => {
+                    const wd = prev as WorkData;
+                    const next = (wd.checklist ?? []).filter((it) => it.id != c.id);
+                    return { ...wd, checklist: next } as WorkData;
+                  })}
+                >
+                  <X className="h-5 w-5 md:h-6 md:w-6" />
+                </button>
               </div>
             ))}
           </div>
