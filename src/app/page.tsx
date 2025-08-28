@@ -623,7 +623,7 @@ function ItemHeader(props: {
         onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onDescriptionChange(e.target.value)}
         onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => onDescriptionCommit?.(e.target.value)}
         placeholder="Optional subtitle or short description"
-        className="mt-2 w-full bg-transparent text-sm leading-6 outline-none placeholder:text-gray-400"
+        className="mt-2 w-full bg-transparent text-sm leading-6 resize-none outline-none placeholder:text-gray-400"
         minRows={1}
       />
     </div>
@@ -666,7 +666,11 @@ function CardRenderer(props: {
               <span className="text-sm text-muted-foreground">{m.label}</span>
               <Progress value={m.value} />
               <input
-                className="w-12 rounded-md border px-2 py-1 text-xs outline-none"
+                className={cn(
+                  "w-12 rounded-md border px-2 py-1 text-xs outline-none appearance-none [-moz-appearance:textfield]",
+                  "[&::-webkit-outer-spin-button]:[-webkit-appearance:none] [&::-webkit-outer-spin-button]:m-0",
+                  "[&::-webkit-inner-spin-button]:[-webkit-appearance:none] [&::-webkit-inner-spin-button]:m-0",
+                )}
                 type="number"
                 min={0}
                 max={100}
