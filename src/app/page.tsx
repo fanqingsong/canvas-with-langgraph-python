@@ -71,11 +71,16 @@ interface WorkItem {
 
 type CardType = "work" | "entity" | "notes" | "chart";
 
-interface WorkEntityData {
-  field1?: string;
-  field2?: string;
-  field2Options: string[];
-  field3Date?: string; // YYYY-MM-DD
+interface WorkData {
+  field1: string;
+  field2: string;
+  field3Date: string; // YYYY-MM-DD
+  checklist: ChecklistItem[];
+}
+
+interface EntityData {
+  field1: string;
+  field2: string;
   tagsAvailable: string[];
   tags: string[];
 }
@@ -93,7 +98,7 @@ interface ChartData {
   metrics: ChartMetric[];
 }
 
-type ItemData = WorkEntityData | NotesData | ChartData;
+type ItemData = WorkData | EntityData | NotesData | ChartData;
 
 interface Item {
   id: string;
@@ -299,22 +304,18 @@ export default function CopilotKitPage() {
 
   const setChecklistItem = useCallback(
     (itemId: string, id: string, updates: Partial<ChecklistItem>) => {
-      updateItemData(itemId, (prev) => {
-        const d = prev as WorkEntityData;
-        // no checklist in new schema; keep for compatibility if ever needed
-        return d;
-      });
+      updateItemData(itemId, (prev) => prev);
     },
     [updateItemData]
   );
 
   const toggleTag = useCallback((itemId: string, tag: string) => {
     updateItemData(itemId, (prev) => {
-      if ((prev as WorkEntityData).tags !== undefined) {
-        const d = prev as WorkEntityData;
-        const selected = new Set(d.tags ?? []);
+      const anyPrev = prev as any;
+      if (Array.isArray(anyPrev.tags)) {
+        const selected = new Set<string>(anyPrev.tags ?? []);
         if (selected.has(tag)) selected.delete(tag); else selected.add(tag);
-        return { ...d, tags: Array.from(selected) };
+        return { ...anyPrev, tags: Array.from(selected) } as ItemData;
       }
       return prev;
     });
@@ -331,15 +332,23 @@ export default function CopilotKitPage() {
   const defaultDataFor = useCallback((type: CardType): ItemData => {
     switch (type) {
       case "work":
+        return {
+          field1: "",
+          field2: "",
+          field3Date: "",
+          checklist: [
+            { id: `c${Date.now()}-1`, text: "Placeholder item 1", done: false, proposed: false },
+            { id: `c${Date.now()}-2`, text: "Placeholder item 2", done: false, proposed: false },
+            { id: `c${Date.now()}-3`, text: "Placeholder item 3", done: false, proposed: false },
+          ],
+        } as WorkData;
       case "entity":
         return {
           field1: "",
           field2: "",
-          field2Options: ["Option A", "Option B", "Option C"],
-          field3Date: "",
           tagsAvailable: ["Priority", "Active", "Premium"],
           tags: [],
-        } as WorkEntityData;
+        } as EntityData;
       case "notes":
         return { content: "" } as NotesData;
       case "chart":
@@ -356,8 +365,11 @@ export default function CopilotKitPage() {
   const removeTag = useCallback(
     (itemId: string, tag: string) => {
       updateItemData(itemId, (prev) => {
-        const d = prev as WorkEntityData;
-        return { ...d, tags: (d.tags ?? []).filter((t) => t !== tag) };
+        const anyPrev = prev as any;
+        if (Array.isArray(anyPrev.tags)) {
+          return { ...anyPrev, tags: (anyPrev.tags as string[]).filter((t) => t !== tag) } as ItemData;
+        }
+        return prev;
       });
     },
     [updateItemData]
@@ -455,9 +467,9 @@ export default function CopilotKitPage() {
     ],
     handler: ({ value, itemId }: { value: string; itemId: string }) => {
       updateItemData(itemId, (prev) => {
-        if ((prev as WorkEntityData).field1 !== undefined || (prev as WorkEntityData).field2Options !== undefined) {
-          const d = prev as WorkEntityData;
-          return { ...d, field1: value };
+        const anyPrev = prev as any;
+        if (typeof anyPrev.field1 === "string") {
+          return { ...anyPrev, field1: value } as ItemData;
         }
         return prev;
       });
@@ -695,50 +707,111 @@ function CardRenderer(props: {
     );
   }
 
-  const d = item.data as WorkEntityData;
-  const set = (partial: Partial<WorkEntityData>) => onUpdateData((prev) => ({ ...(prev as WorkEntityData), ...partial }));
-
-  return (
-    <div className="mt-4">
-      <div className="grid gap-3 md:grid-cols-2">
-        <div>
+  if (item.type === "work") {
+    const d = item.data as WorkData;
+    const set = (partial: Partial<WorkData>) => onUpdateData((prev) => ({ ...(prev as WorkData), ...partial }));
+    return (
+      <div className="mt-4">
+        {/* Field 1 full width */}
+        <div className="mb-3">
           <label className="mb-1 block text-xs font-medium text-gray-500">Field 1</label>
           <input
-            value={d.field1 ?? ""}
+            value={d.field1}
             onChange={(e) => set({ field1: e.target.value })}
             className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors placeholder:text-gray-400 hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent focus:placeholder:text-accent/65"
             placeholder="Field 1 value"
           />
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">Field 2</label>
-          <select
-            value={d.field2 ?? ""}
-            onChange={(e) => set({ field2: e.target.value })}
-            className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent"
-          >
-            <option value="">Select...</option>
-            {(d.field2Options ?? []).map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
-            ))}
-          </select>
+        {/* Row 2 split */}
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Field 2</label>
+            <select
+              value={d.field2}
+              onChange={(e) => set({ field2: e.target.value })}
+              className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent"
+            >
+              <option value="">Select...</option>
+              {["Option A", "Option B", "Option C"].map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Field 3 (Date)</label>
+            <input
+              type="date"
+              value={d.field3Date}
+              onChange={(e) => set({ field3Date: e.target.value })}
+              className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent"
+            />
+          </div>
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">Field 3 (Date)</label>
-          <input
-            type="date"
-            value={d.field3Date ?? ""}
-            onChange={(e) => set({ field3Date: e.target.value })}
-            className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent"
-          />
+        {/* Checklist */}
+        <div className="mt-4">
+          <label className="mb-1 block text-xs font-medium text-gray-500">Checklist</label>
+          <div className="space-y-2">
+            {(d.checklist ?? []).map((c) => (
+              <div key={c.id} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!c.done}
+                  onChange={(e) => onUpdateData((prev) => {
+                    const wd = prev as WorkData;
+                    const next = (wd.checklist ?? []).map((it) => it.id === c.id ? { ...it, done: e.target.checked } : it);
+                    return { ...wd, checklist: next } as WorkData;
+                  })}
+                  className="h-4 w-4"
+                />
+                <input
+                  value={c.text}
+                  onChange={(e) => onUpdateData((prev) => {
+                    const wd = prev as WorkData;
+                    const next = (wd.checklist ?? []).map((it) => it.id === c.id ? { ...it, text: e.target.value } : it);
+                    return { ...wd, checklist: next } as WorkData;
+                  })}
+                  className="flex-1 rounded-md border px-2 py-1 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:bg-accent/10 focus:text-accent"
+                />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
+    );
+  }
 
+  // Entity card
+  const e = item.data as EntityData;
+  const setEntity = (partial: Partial<EntityData>) => onUpdateData((prev) => ({ ...(prev as EntityData), ...partial }));
+  return (
+    <div className="mt-4">
+      <div className="mb-3">
+        <label className="mb-1 block text-xs font-medium text-gray-500">Field 1</label>
+        <input
+          value={e.field1}
+          onChange={(ev) => setEntity({ field1: ev.target.value })}
+          className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors placeholder:text-gray-400 hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent focus:placeholder:text-accent/65"
+          placeholder="Field 1 value"
+        />
+      </div>
+      <div className="mb-3">
+        <label className="mb-1 block text-xs font-medium text-gray-500">Field 2</label>
+        <select
+          value={e.field2}
+          onChange={(ev) => setEntity({ field2: ev.target.value })}
+          className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent"
+        >
+          <option value="">Select...</option>
+          {["Option A", "Option B", "Option C"].map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
+      </div>
       <div className="mt-4">
         <label className="mb-1 block text-xs font-medium text-gray-500">Tags</label>
         <div className="flex flex-wrap gap-2">
-          {(d.tagsAvailable ?? []).map((t) => {
-            const active = (d.tags ?? []).includes(t);
+          {(e.tagsAvailable ?? []).map((t) => {
+            const active = (e.tags ?? []).includes(t);
             return (
               <button
                 key={t}
