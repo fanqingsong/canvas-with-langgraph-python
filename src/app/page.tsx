@@ -1,8 +1,8 @@
 "use client";
 
 import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAdditionalInstructions, useLangGraphInterrupt } from "@copilotkit/react-core";
-import { CopilotKitCSSProperties, CopilotChat } from "@copilotkit/react-ui";
-import { useCallback, useEffect } from "react";
+import { CopilotKitCSSProperties, CopilotChat, CopilotPopup, useChatContext, HeaderProps } from "@copilotkit/react-ui";
+import { useCallback, useEffect, useState } from "react";
 import type React from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import { Button } from "@/components/ui/button"
@@ -124,13 +124,66 @@ const initialState: AgentState = {
   lastAction: "",
 };
 
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia === "undefined") return;
+    const mediaQueryList = window.matchMedia(query);
+    const updateMatch = () => setMatches(mediaQueryList.matches);
+    updateMatch();
+    mediaQueryList.addEventListener("change", updateMatch);
+    return () => mediaQueryList.removeEventListener("change", updateMatch);
+  }, [query]);
+
+  return matches;
+}
+
+function AppChatHeader({ onClose }: { onClose?: () => void }) {
+  return (
+    <div className="p-4 border-b border-sidebar-border">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Avatar className="size-8">
+            <AvatarFallback className="bg-accent/10 text-sidebar-primary-foreground">
+              <span>🪁</span>
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <h3 className="font-bold text-sidebar-foreground">CopilotKit Canvas</h3>
+            <div className="flex items-center gap-x-1.5 text-xs text-muted-foreground">
+              <div className="inline-block size-1.5 rounded-full bg-green-500" />
+              <div>Online <span className="opacity-50 text-[90%] select-none">•</span> Ready to help</div>
+            </div>
+          </div>
+        </div>
+        {typeof onClose === "function" && (
+          <button
+            type="button"
+            aria-label="Close"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border text-muted-foreground hover:text-foreground hover:bg-accent/10"
+            onClick={() => onClose?.()}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PopupHeader({}: HeaderProps) {
+  const { setOpen } = useChatContext();
+  return <AppChatHeader onClose={() => setOpen(false)} />;
+}
+
 export default function CopilotKitPage() {
   const { state, setState, running, run } = useCoAgent<AgentState>({
     name: "sample_agent",
     initialState,
   });
 
-  
+  const isDesktop = useMediaQuery("(min-width: 768px)");
 
   useEffect(() => {
     // eslint-disable-next-line no-console
@@ -540,6 +593,42 @@ export default function CopilotKitPage() {
     >
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden gap-2 sm:gap-3 md:gap-4">
+        {/* Chat Sidebar */}
+        <aside className="-order-1 max-md:hidden flex flex-col min-w-80 w-[30vw] max-w-120 p-[clamp(1rem,2vw,1rem)]">
+          <div className="h-full flex flex-col align-start w-full shadow-lg rounded-2xl border border-sidebar-border overflow-hidden">
+            {/* Chat Header */}
+            <AppChatHeader />
+            {/* Chat Content - conditionally rendered to avoid duplicate rendering */}
+            {isDesktop && (
+              <CopilotChat
+                className="flex-1 overflow-auto w-full"
+                labels={{
+                  title: "Agent",
+                  initial:
+                    "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
+                }}
+                suggestions={[
+                  {
+                    title: "Add a Project",
+                    message: "Create a new project.",
+                  },
+                  {
+                    title: "Add an Entity",
+                    message: "Create a new entity.",
+                  },
+                  {
+                    title: "Add a Note",
+                    message: "Create a new note.",
+                  },
+                  {
+                    title: "Add a Chart",
+                    message: "Create a new chart.",
+                  },
+                ]}
+              />
+            )}
+          </div>
+        </aside>
         {/* Main Content */}
         <main className="flex-1 overflow-auto px-4 py-6">
           <div className="relative flex flex-col mx-auto max-w-7xl h-full min-h-8">
@@ -611,56 +700,37 @@ export default function CopilotKitPage() {
             )}
           </div>
         </main>
-
-        {/* Chat Sidebar */}
-        <aside className="-order-1 flex flex-col min-w-80 w-[30vw] max-w-120 p-[clamp(1rem,2vw,1rem)]">
-          <aside className="h-full flex flex-col align-start w-full shadow-lg rounded-2xl border border-sidebar-border overflow-hidden">
-            {/* Chat Header */}
-            <div className="p-4 border-b border-sidebar-border">
-              <div className="flex items-center gap-3">
-                <Avatar className="size-8">
-                  <AvatarFallback className="bg-accent/10 text-sidebar-primary-foreground">
-                    <span>🪁</span>
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <h3 className="font-bold text-sidebar-foreground">CopilotKit Canvas</h3>
-                  <div className="flex items-center gap-x-1.5 text-xs text-muted-foreground">
-                    <div className="inline-block size-1.5 rounded-full bg-green-500" />
-                    <div>Online <span className="opacity-50 text-[90%] select-none">•</span> Ready to help</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* Chat Content */}
-            <CopilotChat
-              className="flex-1 overflow-auto w-full"
-              labels={{
-                title: "Agent",
-                initial:
-                  "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
-              }}
-              suggestions={[
-                {
-                  title: "Add a Project",
-                  message: "Create a new project.",
-                },
-                {
-                  title: "Add an Entity",
-                  message: "Create a new entity.",
-                },
-                {
-                  title: "Add a Note",
-                  message: "Create a new note.",
-                },
-                {
-                  title: "Add a Chart",
-                  message: "Create a new chart.",
-                },
-              ]}
-            />
-          </aside>
-        </aside>
+      </div>
+      <div className="md:hidden">
+        {/* Mobile Chat Popup - conditionally rendered to avoid duplicate rendering */}
+        {!isDesktop && (
+          <CopilotPopup
+            Header={PopupHeader}
+            labels={{
+              title: "Agent",
+              initial:
+                "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
+            }}
+            suggestions={[
+              {
+                title: "Add a Project",
+                message: "Create a new project.",
+              },
+              {
+                title: "Add an Entity",
+                message: "Create a new entity.",
+              },
+              {
+                title: "Add a Note",
+                message: "Create a new note.",
+              },
+              {
+                title: "Add a Chart",
+                message: "Create a new chart.",
+              },
+            ]}
+          />
+        )}
       </div>
     </div>
   );
@@ -821,7 +891,7 @@ function CardRenderer(props: {
                 return { ...wd, checklist: next } as ProjectData;
               })}
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="size-3.5" />
               Add new
             </button>
           </div>
