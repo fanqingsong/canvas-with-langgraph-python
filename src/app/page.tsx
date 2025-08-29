@@ -7,7 +7,8 @@ import type React from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { PanelLeftClose, PanelLeftOpen, Users, Plus, X } from "lucide-react"
+import { PanelLeftClose, PanelLeftOpen, Users, Plus, X, Code } from "lucide-react"
+import ShikiHighlighter from "react-shiki/web";
 import { Bot } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
@@ -184,12 +185,22 @@ export default function CopilotKitPage() {
   });
 
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const [showJsonView, setShowJsonView] = useState<boolean>(false);
 
   useEffect(() => {
     // eslint-disable-next-line no-console
     console.log("[CoAgent state updated]", state);
   }, [JSON.stringify(state)]);
 
+  // Reset JSON view when there are no items
+  useEffect(() => {
+    const itemsCount = (state?.items ?? []).length;
+    if (itemsCount === 0 && showJsonView) {
+      setShowJsonView(false);
+    }
+  }, [state?.items?.length, showJsonView]);
+
+  // No effect needed: JSON is highlighted via react-shiki component
   
 
   useCoAgentStateRender<AgentState>({
@@ -594,7 +605,7 @@ export default function CopilotKitPage() {
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden gap-2 sm:gap-3 md:gap-4">
         {/* Chat Sidebar */}
-        <aside className="-order-1 max-md:hidden flex flex-col min-w-80 w-[30vw] max-w-120 p-[clamp(1rem,2vw,1rem)]">
+        <aside className="-order-1 max-md:hidden flex flex-col min-w-80 w-[30vw] max-w-120 p-4">
           <div className="h-full flex flex-col align-start w-full shadow-lg rounded-2xl border border-sidebar-border overflow-hidden">
             {/* Chat Header */}
             <AppChatHeader />
@@ -632,26 +643,28 @@ export default function CopilotKitPage() {
         {/* Main Content */}
         <main className="flex-1 overflow-auto px-4 py-6">
           <div className="relative flex flex-col mx-auto max-w-7xl h-full min-h-8">
-            {/* Global Title & Description */}
-            <div className="mb-6">
-              <input
-                value={state?.globalTitle ?? initialState.globalTitle}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setState((prev) => ({ ...(prev ?? initialState), globalTitle: e.target.value }))
-                }
-                placeholder="Canvas title..."
-                className={cn(titleClasses, "text-2xl font-semibold")}
-              />
-              <TextareaAutosize
-                value={state?.globalDescription ?? initialState.globalDescription}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                  setState((prev) => ({ ...(prev ?? initialState), globalDescription: e.target.value }))
-                }
-                minRows={1}
-                placeholder="Canvas description..."
-                className={cn(titleClasses, "mt-2 text-sm leading-6 resize-none overflow-hidden")}
-              />
-            </div>
+            {/* Global Title & Description (hidden in JSON view) */}
+            {!showJsonView && (
+              <div className="mb-6">
+                <input
+                  value={state?.globalTitle ?? initialState.globalTitle}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setState((prev) => ({ ...(prev ?? initialState), globalTitle: e.target.value }))
+                  }
+                  placeholder="Canvas title..."
+                  className={cn(titleClasses, "text-2xl font-semibold")}
+                />
+                <TextareaAutosize
+                  value={state?.globalDescription ?? initialState.globalDescription}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setState((prev) => ({ ...(prev ?? initialState), globalDescription: e.target.value }))
+                  }
+                  minRows={1}
+                  placeholder="Canvas description..."
+                  className={cn(titleClasses, "mt-2 text-sm leading-6 resize-none overflow-hidden")}
+                />
+              </div>
+            )}
             {(state?.items ?? []).length === 0 ? (
               <EmptyState className="flex-1">
                 <div className="mx-auto max-w-lg text-center">
@@ -664,37 +677,72 @@ export default function CopilotKitPage() {
               </EmptyState>
             ) : (
             <>
-              <div className="flex-1">
-                <div className="grid gap-6 lg:grid-cols-2 pb-12">
-                  {(state?.items ?? initialState.items).map((item) => (
-                    <article key={item.id} className="relative rounded-2xl border p-5 shadow-sm transition-colors ease-out bg-card hover:border-accent/40 focus-within:border-accent/60">
-                      <button
-                        type="button"
-                        aria-label="Delete card"
-                        className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-card text-gray-400 hover:bg-accent/10 hover:text-accent transition-colors"
-                        onClick={() => deleteItem(item.id)}
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                      <ItemHeader
-                        id={item.id}
-                        name={item.name}
-                        subtitle={item.subtitle}
-                        description={""}
-                        onNameChange={(v) => updateItem(item.id, { name: v })}
-                        onSubtitleChange={(v) => updateItem(item.id, { subtitle: v })}
-                        onDescriptionChange={(v) => updateItemData(item.id, (prev) => prev)}
-                      />
+              <div className="flex-1 py-0 overflow-hidden">
+                {showJsonView ? (
+                  <div className="pb-4 h-full">
+                    <div className="rounded-2xl border shadow-sm bg-card h-full overflow-auto max-md:text-sm">
+                      <ShikiHighlighter language="json" theme="github-light">
+                        {JSON.stringify({
+                          items: state?.items ?? initialState.items,
+                          globalTitle: state?.globalTitle ?? initialState.globalTitle,
+                          globalDescription: state?.globalDescription ?? initialState.globalDescription,
+                        }, null, 2)}
+                      </ShikiHighlighter>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-6 lg:grid-cols-2 pb-12">
+                    {(state?.items ?? initialState.items).map((item) => (
+                      <article key={item.id} className="relative rounded-2xl border p-5 shadow-sm transition-colors ease-out bg-card hover:border-accent/40 focus-within:border-accent/60">
+                        <button
+                          type="button"
+                          aria-label="Delete card"
+                          className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-card text-gray-400 hover:bg-accent/10 hover:text-accent transition-colors"
+                          onClick={() => deleteItem(item.id)}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                        <ItemHeader
+                          id={item.id}
+                          name={item.name}
+                          subtitle={item.subtitle}
+                          description={""}
+                          onNameChange={(v) => updateItem(item.id, { name: v })}
+                          onSubtitleChange={(v) => updateItem(item.id, { subtitle: v })}
+                          onDescriptionChange={(v) => updateItemData(item.id, (prev) => prev)}
+                        />
 
-                      <div className="mt-6">
-                        <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={(tag) => toggleTag(item.id, tag)} />
-                      </div>
-                    </article>
-                  ))}
-                </div>
+                        <div className="mt-6">
+                          <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={(tag) => toggleTag(item.id, tag)} />
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="flex sticky w-full justify-center bottom-0">
-                <NewItemMenu onSelect={(t) => addItem(t)} align="center" className="bg-white shadow-lg hover:bg-accent hover:shadow-lg hover:shadow-accent/25 hover:border-accent" />
+                <div className="inline-flex">
+                  <NewItemMenu
+                    onSelect={(t) => addItem(t)}
+                    align="center"
+                    className={cn(
+                      "bg-card shadow-lg hover:bg-accent hover:shadow-lg hover:shadow-accent/25 hover:border-accent",
+                      "rounded-r-none border-r-0",
+                    )}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={cn(
+                      "bg-card gap-2 text-base font-semibold rounded-l-none",
+                      showJsonView ? "bg-accent/20 border-accent text-accent" : undefined,
+                    )}
+                    onClick={() => setShowJsonView((v) => !v)}
+                  >
+                    {showJsonView ? <Code className="size-3.5" /> : <X className="size-3.5" />}
+                    JSON
+                  </Button>
+                </div>
               </div>
             </>
             )}
