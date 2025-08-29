@@ -7,7 +7,7 @@ import type React from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { PanelLeftClose, PanelLeftOpen, Users, Plus, X, Code } from "lucide-react"
+import { PanelLeftClose, PanelLeftOpen, Users, Plus, X, Braces, LayoutPanelTop, RectangleVertical } from "lucide-react"
 import ShikiHighlighter from "react-shiki/web";
 import { Bot } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
@@ -641,8 +641,11 @@ export default function CopilotKitPage() {
           </div>
         </aside>
         {/* Main Content */}
-        <main className="flex-1 overflow-auto px-4 py-6">
-          <div className="relative flex flex-col mx-auto max-w-7xl h-full min-h-8">
+        <main className="flex-1 overflow-auto p-4">
+          <div className={cn(
+            "relative mx-auto max-w-7xl h-full min-h-8",
+            showJsonView && "flex flex-col",
+          )}>
             {/* Global Title & Description (hidden in JSON view) */}
             {!showJsonView && (
               <div className="mb-6">
@@ -721,12 +724,12 @@ export default function CopilotKitPage() {
                 )}
               </div>
               <div className="flex sticky w-full justify-center bottom-0">
-                <div className="inline-flex">
+                <div className="inline-flex rounded-lg shadow-lg [&_button]:w-22">
                   <NewItemMenu
                     onSelect={(t) => addItem(t)}
                     align="center"
                     className={cn(
-                      "bg-card shadow-lg hover:bg-accent hover:shadow-lg hover:shadow-accent/25 hover:border-accent",
+                      "bg-card hover:bg-accent hover:border-accent shadow-none!",
                       "rounded-r-none border-r-0",
                     )}
                   />
@@ -734,13 +737,16 @@ export default function CopilotKitPage() {
                     type="button"
                     variant="outline"
                     className={cn(
-                      "bg-card gap-2 text-base font-semibold rounded-l-none",
-                      showJsonView ? "bg-accent/20 border-accent text-accent" : undefined,
+                      "bg-card hover:bg-accent hover:border-accent shadow-none!",
+                      "w-23 gap-1.25 text-base font-semibold rounded-l-none",
+                      showJsonView && "**:hidden!",
                     )}
                     onClick={() => setShowJsonView((v) => !v)}
                   >
-                    {showJsonView ? <Code className="size-3.5" /> : <X className="size-3.5" />}
-                    JSON
+                    {showJsonView
+                      ? "Canvas"
+                      : <>JSON</>
+                    }
                   </Button>
                 </div>
               </div>
@@ -800,7 +806,7 @@ function ItemHeader(props: {
     <div className="mb-4">
       <div className="mb-2">
         <span className="rounded-sm border border-border px-1 py-0.5 bg-muted text-xs font-mono text-muted-foreground/50">
-          <span className="font-medium pr-1">ID:</span><span className="tracking-wide">{id}</span>
+          <span className="font-medium">ID:</span><span className="-tracking-widest"> </span><span className="tracking-wide">{id}</span>
         </span>
       </div>
       <input
