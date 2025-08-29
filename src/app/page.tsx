@@ -582,7 +582,7 @@ export default function CopilotKitPage() {
                       <button
                         type="button"
                         aria-label="Delete card"
-                        className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white text-gray-400 hover:bg-accent/10 hover:text-accent transition-colors"
+                        className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-card text-gray-400 hover:bg-accent/10 hover:text-accent transition-colors"
                         onClick={() => deleteItem(item.id)}
                       >
                         <X className="h-4 w-4" />
@@ -613,51 +613,53 @@ export default function CopilotKitPage() {
         </main>
 
         {/* Chat Sidebar */}
-        <aside className="-order-1 flex flex-col align-start min-w-80 w-[30vw] max-w-120 border-r border-sidebar-border bg-sidebar shadow-lg">
-          {/* Chat Header */}
-          <div className="p-4 border-b border-sidebar-border">
-            <div className="flex items-center gap-3">
-              <Avatar className="size-8">
-                <AvatarFallback className="bg-accent/10 text-sidebar-primary-foreground">
-                  <span>🪁</span>
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <h3 className="font-bold text-sidebar-foreground">CopilotKit Canvas</h3>
-                <div className="flex items-center gap-x-1.5 text-xs text-muted-foreground">
-                  <div className="inline-block size-1.5 rounded-full bg-green-500" />
-                  <div>Online <span className="opacity-50 text-[90%] select-none">•</span> Ready to help</div>
+        <aside className="-order-1 flex flex-col min-w-80 w-[30vw] max-w-120 p-[clamp(1rem,2vw,1rem)]">
+          <aside className="h-full flex flex-col align-start w-full shadow-lg rounded-2xl border border-sidebar-border overflow-hidden">
+            {/* Chat Header */}
+            <div className="p-4 border-b border-sidebar-border">
+              <div className="flex items-center gap-3">
+                <Avatar className="size-8">
+                  <AvatarFallback className="bg-accent/10 text-sidebar-primary-foreground">
+                    <span>🪁</span>
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h3 className="font-bold text-sidebar-foreground">CopilotKit Canvas</h3>
+                  <div className="flex items-center gap-x-1.5 text-xs text-muted-foreground">
+                    <div className="inline-block size-1.5 rounded-full bg-green-500" />
+                    <div>Online <span className="opacity-50 text-[90%] select-none">•</span> Ready to help</div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          {/* Chat Content */}
-          <CopilotChat
-            className="flex-1 overflow-auto w-full"
-            labels={{
-              title: "Agent",
-              initial:
-                "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
-            }}
-            suggestions={[
-              {
-                title: "Add a Project",
-                message: "Create a new project.",
-              },
-              {
-                title: "Add an Entity",
-                message: "Create a new entity.",
-              },
-              {
-                title: "Add a Note",
-                message: "Create a new note.",
-              },
-              {
-                title: "Add a Chart",
-                message: "Create a new chart.",
-              },
-            ]}
-          />
+            {/* Chat Content */}
+            <CopilotChat
+              className="flex-1 overflow-auto w-full"
+              labels={{
+                title: "Agent",
+                initial:
+                  "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
+              }}
+              suggestions={[
+                {
+                  title: "Add a Project",
+                  message: "Create a new project.",
+                },
+                {
+                  title: "Add an Entity",
+                  message: "Create a new entity.",
+                },
+                {
+                  title: "Add a Note",
+                  message: "Create a new note.",
+                },
+                {
+                  title: "Add a Chart",
+                  message: "Create a new chart.",
+                },
+              ]}
+            />
+          </aside>
         </aside>
       </div>
     </div>
