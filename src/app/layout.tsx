@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { CopilotKit } from "@copilotkit/react-core";
 import { Manrope } from "next/font/google";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import "@copilotkit/react-ui/styles.css";
 
@@ -22,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${manrope.variable}`}>
+    <html lang="en" className={`${manrope.variable} ${GeistMono.variable}`}>
       <body className={"subpixel-antialiased"}>
         <CopilotKit runtimeUrl="/api/copilotkit" agent="sample_agent" showDevConsole={false}>
           {children}
