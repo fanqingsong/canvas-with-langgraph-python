@@ -384,21 +384,29 @@ export default function CopilotKitPage() {
   );
 
   const addItem = useCallback((type?: CardType, name?: string) => {
-    const id = "itm_" + Date.now().toString(36);
     const t: CardType = type ?? "project";
-    const item: Item = {
-      id,
-      type: t,
-      name: name && name.trim() ? name.trim() : "",
-      subtitle: "",
-      data: defaultDataFor(t),
-    };
+    let newId = "";
     setState((prev) => {
       const base = prev ?? initialState;
-      const nextItems = [...(base.items ?? []), item];
-      return { ...base, items: nextItems, activeItemId: id } as AgentState;
+      const items: Item[] = base.items ?? [];
+      const maxNum = items.reduce((max: number, it: Item) => {
+        const isNumericId = /^\d+$/.test(it.id);
+        const numeric = isNumericId ? parseInt(it.id, 10) : NaN;
+        return Number.isFinite(numeric) ? Math.max(max, numeric) : max;
+      }, 0);
+      const nextNum = maxNum + 1;
+      newId = String(nextNum).padStart(4, "0");
+      const item: Item = {
+        id: newId,
+        type: t,
+        name: name && name.trim() ? name.trim() : "",
+        subtitle: "",
+        data: defaultDataFor(t),
+      };
+      const nextItems = [...items, item];
+      return { ...base, items: nextItems, activeItemId: newId } as AgentState;
     });
-    return id;
+    return newId;
   }, [defaultDataFor, setState]);
 
   const setActiveItem = useCallback((itemId: string) => {
@@ -580,6 +588,7 @@ export default function CopilotKitPage() {
                         <X className="h-4 w-4" />
                       </button>
                       <ItemHeader
+                        id={item.id}
                         name={item.name}
                         subtitle={item.subtitle}
                         description={""}
@@ -604,11 +613,11 @@ export default function CopilotKitPage() {
         </main>
 
         {/* Chat Sidebar */}
-        <aside className="-order-1 flex flex-col align-start w-80 sm:w-90 md:w-100 lg:w-110 xl:w-120 border-r border-sidebar-border bg-sidebar shadow-lg">
+        <aside className="-order-1 flex flex-col align-start min-w-80 w-[30vw] max-w-120 border-r border-sidebar-border bg-sidebar shadow-lg">
           {/* Chat Header */}
           <div className="p-4 border-b border-sidebar-border">
             <div className="flex items-center gap-3">
-              <Avatar className="h-8 w-8">
+              <Avatar className="size-8">
                 <AvatarFallback className="bg-accent/10 text-sidebar-primary-foreground">
                   <span>🪁</span>
                 </AvatarFallback>
@@ -656,6 +665,7 @@ export default function CopilotKitPage() {
 }
 
 function ItemHeader(props: {
+  id: string;
   name: string;
   subtitle: string;
   description: string;
@@ -665,9 +675,14 @@ function ItemHeader(props: {
   onNameCommit?: (value: string) => void;
   onDescriptionCommit?: (value: string) => void;
 }) {
-  const { name, subtitle, description, onNameChange, onSubtitleChange, onDescriptionChange, onNameCommit, onDescriptionCommit } = props;
+  const { id, name, subtitle, description, onNameChange, onSubtitleChange, onDescriptionChange, onNameCommit, onDescriptionCommit } = props;
   return (
     <div className="mb-4">
+      <div className="mb-2">
+        <span className="rounded-sm border border-border px-1 py-0.5 bg-muted text-xs font-mono text-muted-foreground/50">
+          <span className="font-medium pr-1">ID:</span><span className="tracking-wide">{id}</span>
+        </span>
+      </div>
       <input
         value={name}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => onNameChange(e.target.value)}
