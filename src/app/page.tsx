@@ -19,7 +19,9 @@ function NewItemMenu({ onSelect, align = "end", className }: { onSelect: (t: Car
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="default" className={cn("gap-2 text-base font-semibold bg-background rounded-lg", className)}>
+        <Button variant="outline" size="default" className={cn("gap-2 text-base font-semibold bg-card rounded-lg",
+          // "hover:bg-accent/10 hover:border-accent hover:text-accent",
+          className)}>
           <Plus className="size-5" />
           New
         </Button>
@@ -603,9 +605,9 @@ export default function CopilotKitPage() {
       className="h-screen flex flex-col"
     >
       {/* Main Layout */}
-      <div className="flex flex-1 overflow-hidden gap-2 sm:gap-3 md:gap-4">
+      <div className="flex flex-1 overflow-hidden">
         {/* Chat Sidebar */}
-        <aside className="-order-1 max-md:hidden flex flex-col min-w-80 w-[30vw] max-w-120 p-4">
+        <aside className="-order-1 max-md:hidden flex flex-col min-w-80 w-[30vw] max-w-120 p-4 pr-0">
           <div className="h-full flex flex-col align-start w-full shadow-lg rounded-2xl border border-sidebar-border overflow-hidden">
             {/* Chat Header */}
             <AppChatHeader />
@@ -641,118 +643,122 @@ export default function CopilotKitPage() {
           </div>
         </aside>
         {/* Main Content */}
-        <main className="flex-1 overflow-auto p-4">
-          <div className={cn(
-            "relative mx-auto max-w-7xl h-full min-h-8",
-            showJsonView && "flex flex-col",
-          )}>
-            {/* Global Title & Description (hidden in JSON view) */}
-            {!showJsonView && (
-              <div className="mb-6">
-                <input
-                  value={state?.globalTitle ?? initialState.globalTitle}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    setState((prev) => ({ ...(prev ?? initialState), globalTitle: e.target.value }))
-                  }
-                  placeholder="Canvas title..."
-                  className={cn(titleClasses, "text-2xl font-semibold")}
-                />
-                <TextareaAutosize
-                  value={state?.globalDescription ?? initialState.globalDescription}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                    setState((prev) => ({ ...(prev ?? initialState), globalDescription: e.target.value }))
-                  }
-                  minRows={1}
-                  placeholder="Canvas description..."
-                  className={cn(titleClasses, "mt-2 text-sm leading-6 resize-none overflow-hidden")}
-                />
-              </div>
-            )}
-            {(state?.items ?? []).length === 0 ? (
-              <EmptyState className="flex-1">
-                <div className="mx-auto max-w-lg text-center">
-                  <h2 className="text-lg font-semibold text-foreground">Nothing here yet</h2>
-                  <p className="mt-2 text-sm text-muted-foreground">Create your first item to get started.</p>
-                  <div className="mt-6 flex justify-center">
-                    <NewItemMenu onSelect={(t) => addItem(t)} align="center" />
-                  </div>
+        <main className="relative flex flex-1 h-full">
+          <div className="relative overflow-auto size-full px-4 sm:px-8 md:px-10 py-4">
+            <div className={cn(
+              "relative mx-auto max-w-7xl h-full min-h-8",
+              showJsonView && "flex flex-col",
+            )}>
+              {/* Global Title & Description (hidden in JSON view) */}
+              {!showJsonView && (
+                <div className="mb-6">
+                  <input
+                    value={state?.globalTitle ?? initialState.globalTitle}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setState((prev) => ({ ...(prev ?? initialState), globalTitle: e.target.value }))
+                    }
+                    placeholder="Canvas title..."
+                    className={cn(titleClasses, "text-2xl font-semibold")}
+                  />
+                  <TextareaAutosize
+                    value={state?.globalDescription ?? initialState.globalDescription}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setState((prev) => ({ ...(prev ?? initialState), globalDescription: e.target.value }))
+                    }
+                    minRows={1}
+                    placeholder="Canvas description..."
+                    className={cn(titleClasses, "mt-2 text-sm leading-6 resize-none overflow-hidden")}
+                  />
                 </div>
-              </EmptyState>
-            ) : (
-            <>
-              <div className="flex-1 py-0 overflow-hidden">
-                {showJsonView ? (
-                  <div className="pb-4 h-full">
-                    <div className="rounded-2xl border shadow-sm bg-card h-full overflow-auto max-md:text-sm">
-                      <ShikiHighlighter language="json" theme="github-light">
-                        {JSON.stringify({
-                          items: state?.items ?? initialState.items,
-                          globalTitle: state?.globalTitle ?? initialState.globalTitle,
-                          globalDescription: state?.globalDescription ?? initialState.globalDescription,
-                        }, null, 2)}
-                      </ShikiHighlighter>
+              )}
+              {(state?.items ?? []).length === 0 ? (
+                <EmptyState className="flex-1">
+                  <div className="mx-auto max-w-lg text-center">
+                    <h2 className="text-lg font-semibold text-foreground">Nothing here yet</h2>
+                    <p className="mt-2 text-sm text-muted-foreground">Create your first item to get started.</p>
+                    <div className="mt-6 flex justify-center">
+                      <NewItemMenu onSelect={(t) => addItem(t)} align="center" className="md:h-10" />
                     </div>
                   </div>
-                ) : (
-                  <div className="grid gap-6 lg:grid-cols-2 pb-12">
-                    {(state?.items ?? initialState.items).map((item) => (
-                      <article key={item.id} className="relative rounded-2xl border p-5 shadow-sm transition-colors ease-out bg-card hover:border-accent/40 focus-within:border-accent/60">
-                        <button
-                          type="button"
-                          aria-label="Delete card"
-                          className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-card text-gray-400 hover:bg-accent/10 hover:text-accent transition-colors"
-                          onClick={() => deleteItem(item.id)}
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                        <ItemHeader
-                          id={item.id}
-                          name={item.name}
-                          subtitle={item.subtitle}
-                          description={""}
-                          onNameChange={(v) => updateItem(item.id, { name: v })}
-                          onSubtitleChange={(v) => updateItem(item.id, { subtitle: v })}
-                          onDescriptionChange={(v) => updateItemData(item.id, (prev) => prev)}
-                        />
+                </EmptyState>
+              ) : (
+                <div className="flex-1 py-0 overflow-hidden">
+                  {showJsonView ? (
+                    <div className="pb-4 size-full">
+                      <div className="rounded-2xl border shadow-sm bg-card size-full overflow-auto max-md:text-sm">
+                        <ShikiHighlighter language="json" theme="github-light">
+                          {JSON.stringify({
+                            items: state?.items ?? initialState.items,
+                            globalTitle: state?.globalTitle ?? initialState.globalTitle,
+                            globalDescription: state?.globalDescription ?? initialState.globalDescription,
+                          }, null, 2)}
+                        </ShikiHighlighter>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid gap-6 lg:grid-cols-2 pb-12">
+                      {(state?.items ?? initialState.items).map((item) => (
+                        <article key={item.id} className="relative rounded-2xl border p-5 shadow-sm transition-colors ease-out bg-card hover:border-accent/40 focus-within:border-accent/60">
+                          <button
+                            type="button"
+                            aria-label="Delete card"
+                            className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-card text-gray-400 hover:bg-accent/10 hover:text-accent transition-colors"
+                            onClick={() => deleteItem(item.id)}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                          <ItemHeader
+                            id={item.id}
+                            name={item.name}
+                            subtitle={item.subtitle}
+                            description={""}
+                            onNameChange={(v) => updateItem(item.id, { name: v })}
+                            onSubtitleChange={(v) => updateItem(item.id, { subtitle: v })}
+                            onDescriptionChange={(v) => updateItemData(item.id, (prev) => prev)}
+                          />
 
-                        <div className="mt-6">
-                          <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={(tag) => toggleTag(item.id, tag)} />
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="flex sticky w-full justify-center bottom-0">
-                <div className="inline-flex rounded-lg shadow-lg [&_button]:w-22">
-                  <NewItemMenu
-                    onSelect={(t) => addItem(t)}
-                    align="center"
-                    className={cn(
-                      "bg-card hover:bg-accent hover:border-accent shadow-none!",
-                      "rounded-r-none border-r-0",
-                    )}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className={cn(
-                      "bg-card hover:bg-accent hover:border-accent shadow-none!",
-                      "w-23 gap-1.25 text-base font-semibold rounded-l-none",
-                      showJsonView && "**:hidden!",
-                    )}
-                    onClick={() => setShowJsonView((v) => !v)}
-                  >
-                    {showJsonView
-                      ? "Canvas"
-                      : <>JSON</>
-                    }
-                  </Button>
+                          <div className="mt-6">
+                            <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={(tag) => toggleTag(item.id, tag)} />
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            </>
-            )}
+              )}
+            </div>
           </div>
+          {(state?.items ?? []).length > 0 ? (
+            <div className="flex absolute left-0 bottom-4 w-full justify-center">
+              <div className={cn(
+                "inline-flex rounded-lg shadow-lg bg-card",
+                "[&_button]:bg-card [&_button]:w-22 md:[&_button]:h-10",
+                "[&_button]:shadow-none! [&_button]:hover:bg-accent",
+                "[&_button]:hover:border-accent [&_button]:hover:text-accent",
+                "[&_button]:hover:bg-accent/10!",
+              )}>
+                <NewItemMenu
+                  onSelect={(t) => addItem(t)}
+                  align="center"
+                  className="rounded-r-none border-r-0 peer"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "gap-1.25 text-base font-semibold rounded-l-none",
+                    "peer-hover:border-l-accent!",
+                  )}
+                  onClick={() => setShowJsonView((v) => !v)}
+                >
+                  {showJsonView
+                    ? "Canvas"
+                    : <>JSON</>
+                  }
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </main>
       </div>
       <div className="md:hidden">
@@ -805,7 +811,7 @@ function ItemHeader(props: {
   return (
     <div className="mb-4">
       <div className="mb-2">
-        <span className="rounded-sm border border-border px-1 py-0.5 bg-muted text-xs font-mono text-muted-foreground/50">
+        <span className="rounded-sm border border-dashed border-foreground/25 px-1 py-0.5 text-xs font-mono text-muted-foreground/50">
           <span className="font-medium">ID:</span><span className="-tracking-widest"> </span><span className="tracking-wide">{id}</span>
         </span>
       </div>
@@ -838,7 +844,7 @@ function CardRenderer(props: {
     const d = item.data as NoteData;
     return (
       <div className="mt-4">
-        <label className="mb-1 block text-xs font-medium text-gray-500">Field 1 (e.g., Rich Text Content)</label>
+        <label className="mb-1 block text-xs font-medium text-gray-500">Field 1 (e.g., Textarea)</label>
         <TextareaAutosize
           value={d.content ?? ""}
           onChange={(e) => onUpdateData(() => ({ content: e.target.value }))}
@@ -894,7 +900,7 @@ function CardRenderer(props: {
       <div className="mt-4 @container">
         {/* Field 1 full width */}
         <div className="mb-3">
-          <label className="mb-1 block text-xs font-medium text-gray-500">Field 1</label>
+          <label className="mb-1 block text-xs font-medium text-gray-500">Field 1 (Text)</label>
           <input
             value={d.field1}
             onChange={(e) => set({ field1: e.target.value })}
@@ -905,7 +911,7 @@ function CardRenderer(props: {
         {/* Row 2 split */}
         <div className="contents @xs:grid gap-3 md:grid-cols-2">
           <div className="@max-xs:mb-3">
-            <label className="mb-1 block text-xs font-medium text-gray-500">Field 2</label>
+            <label className="mb-1 block text-xs font-medium text-gray-500">Field 2 (Select)</label>
             <select
               value={d.field2}
               onChange={(e) => set({ field2: e.target.value })}
@@ -932,7 +938,7 @@ function CardRenderer(props: {
         {/* Checklist */}
         <div className="mt-4">
           <div className="mb-2 flex items-center justify-between">
-            <label className="block text-xs font-medium text-gray-500">Checklist</label>
+            <label className="block text-xs font-medium text-gray-500">Field 4 (Checklist)</label>
             <button
               type="button"
               className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
@@ -951,7 +957,7 @@ function CardRenderer(props: {
           </div>
           <div className="space-y-2">
             {(!d.checklist || d.checklist.length === 0) && (
-              <div className="grid place-items-center py-1.75 text-xs text-muted-foreground text-pretty">
+              <div className="grid place-items-center py-1.75 text-xs text-primary/50 font-medium text-pretty">
                 Nothing here yet. Add a checklist item to get started.
               </div>
             )}
