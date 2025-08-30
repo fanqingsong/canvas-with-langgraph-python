@@ -12,6 +12,7 @@ import ShikiHighlighter from "react-shiki/web";
 import { Bot } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
+import { nanoid } from "nanoid";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 
@@ -36,16 +37,6 @@ function NewItemMenu({ onSelect, align = "end", className }: { onSelect: (t: Car
   );
 }
 
-type WorkItemType = "Task" | "Bug" | "Research";
-type Priority = "P0" | "P1" | "P2" | "P3";
-type Status = "Not Started" | "In Progress" | "Blocked" | "Done";
-
-interface Owner {
-  id: string;
-  name: string;
-  avatarUrl: string;
-}
-
 interface ChecklistItem {
   id: string;
   text: string;
@@ -56,20 +47,6 @@ interface ChecklistItem {
 interface LinkItem {
   title: string;
   url: string;
-}
-
-interface WorkItem {
-  id: string;
-  title: string;
-  type: WorkItemType;
-  priority: Priority;
-  status: Status;
-  owner: Owner;
-  dueDate: string; // YYYY-MM-DD
-  tags: string[];
-  checklist: ChecklistItem[];
-  description: string;
-  links: LinkItem[];
 }
 
 type CardType = "project" | "entity" | "note" | "chart";
@@ -93,8 +70,9 @@ interface NoteData {
 }
 
 interface ChartMetric {
+  id?: string;
   label: string;
-  value: number; // 0..100
+  value: number | ""; // 0..100
 }
 
 interface ChartData {
@@ -420,17 +398,13 @@ export default function CopilotKitPage() {
         return {
           field1: "",
           field2: "",
-          tagsAvailable: ["Priority", "Active", "Premium"],
+          tagsAvailable: ["Tag 1", "Tag 2", "Tag 3"],
           tags: [],
         } as EntityData;
       case "note":
         return { content: "" } as NoteData;
       case "chart":
-        return { metrics: [
-          { label: "Metric A", value: 0 },
-          { label: "Metric B", value: 0 },
-          { label: "Metric C", value: 0 },
-        ] } as ChartData;
+        return { metrics: [] } as ChartData;
       default:
         return { content: "" } as NoteData;
     }
@@ -521,6 +495,20 @@ export default function CopilotKitPage() {
     },
   });
 
+  // Set item subtitle
+  useCopilotAction({
+    name: "setItemSubtitle",
+    description: "Set an item's subtitle (short description).",
+    available: "remote",
+    parameters: [
+      { name: "subtitle", type: "string", required: true, description: "The new item subtitle." },
+      { name: "itemId", type: "string", required: true, description: "Target item id." },
+    ],
+    handler: ({ subtitle, itemId }: { subtitle: string; itemId: string }) => {
+      updateItem(itemId, { subtitle });
+    },
+  });
+
   useCopilotAction({
     name: "setItemDescription",
     description: "Set an item's description/subtitle.",
@@ -539,9 +527,69 @@ export default function CopilotKitPage() {
     },
   });
 
+  // Note-specific field updates (field numbering)
   useCopilotAction({
-    name: "setProjectOwnerName",
-    description: "Update field1 for an item (project/entity).",
+    name: "setNoteField1",
+    description: "Update note field1 (textarea).",
+    available: "remote",
+    parameters: [
+      { name: "value", type: "string", required: true, description: "New content for field1." },
+      { name: "itemId", type: "string", required: true, description: "Target item id (note)." },
+    ],
+    handler: ({ value, itemId }: { value: string; itemId: string }) => {
+      updateItemData(itemId, (prev) => {
+        const nd = prev as NoteData;
+        if (Object.prototype.hasOwnProperty.call(nd, "content")) {
+          return { ...(nd as NoteData), content: value } as NoteData;
+        }
+        return prev;
+      });
+    },
+  });
+
+  useCopilotAction({
+    name: "appendNoteField1",
+    description: "Append text to note field1 (textarea).",
+    available: "remote",
+    parameters: [
+      { name: "value", type: "string", required: true, description: "Text to append." },
+      { name: "itemId", type: "string", required: true, description: "Target item id (note)." },
+      { name: "withNewline", type: "boolean", required: false, description: "If true, prefix with a newline." },
+    ],
+    handler: ({ value, itemId, withNewline }: { value: string; itemId: string; withNewline?: boolean }) => {
+      updateItemData(itemId, (prev) => {
+        const nd = prev as NoteData;
+        if (Object.prototype.hasOwnProperty.call(nd, "content")) {
+          const existing = (nd.content ?? "");
+          const next = existing + (withNewline ? "\n" : "") + value;
+          return { ...(nd as NoteData), content: next } as NoteData;
+        }
+        return prev;
+      });
+    },
+  });
+
+  useCopilotAction({
+    name: "clearNoteField1",
+    description: "Clear note field1 (textarea) content.",
+    available: "remote",
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target item id (note)." },
+    ],
+    handler: ({ itemId }: { itemId: string }) => {
+      updateItemData(itemId, (prev) => {
+        const nd = prev as NoteData;
+        if (Object.prototype.hasOwnProperty.call(nd, "content")) {
+          return { ...(nd as NoteData), content: "" } as NoteData;
+        }
+        return prev;
+      });
+    },
+  });
+
+  useCopilotAction({
+    name: "setProjectField1",
+    description: "Update project field1 (text).",
     available: "remote",
     parameters: [
       { name: "value", type: "string", required: true, description: "New value for field1." },
@@ -552,6 +600,272 @@ export default function CopilotKitPage() {
         const anyPrev = prev as any;
         if (typeof anyPrev.field1 === "string") {
           return { ...anyPrev, field1: value } as ItemData;
+        }
+        return prev;
+      });
+    },
+  });
+
+  // Project-specific field updates
+  useCopilotAction({
+    name: "setProjectField2",
+    description: "Update project field2 (select).",
+    available: "remote",
+    parameters: [
+      { name: "value", type: "string", required: true, description: "New value for field2." },
+      { name: "itemId", type: "string", required: true, description: "Target item id." },
+    ],
+    handler: ({ value, itemId }: { value: string; itemId: string }) => {
+      updateItemData(itemId, (prev) => {
+        const anyPrev = prev as any;
+        if (typeof anyPrev.field2 === "string") {
+          return { ...anyPrev, field2: value } as ItemData;
+        }
+        return prev;
+      });
+    },
+  });
+
+  useCopilotAction({
+    name: "setProjectField3",
+    description: "Update project field3 (date, YYYY-MM-DD).",
+    available: "remote",
+    parameters: [
+      { name: "date", type: "string", required: true, description: "Date in YYYY-MM-DD format." },
+      { name: "itemId", type: "string", required: true, description: "Target item id." },
+    ],
+    handler: ({ date, itemId }: { date: string; itemId: string }) => {
+      updateItemData(itemId, (prev) => {
+        const anyPrev = prev as any;
+        if (typeof anyPrev.field3Date === "string") {
+          return { ...anyPrev, field3Date: date } as ItemData;
+        }
+        return prev;
+      });
+    },
+  });
+
+  // Project checklist CRUD
+  useCopilotAction({
+    name: "addProjectChecklistItem",
+    description: "Add a new checklist item to a project.",
+    available: "remote",
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target item id (project)." },
+      { name: "text", type: "string", required: false, description: "Initial checklist text (optional)." },
+    ],
+    handler: ({ itemId, text }: { itemId: string; text?: string }) => {
+      let createdId = "";
+      updateItemData(itemId, (prev) => {
+        const wd = prev as ProjectData;
+        const nextId = nanoid();
+        createdId = nextId;
+        const next = [
+          ...(wd.checklist ?? []),
+          { id: nextId, text: text ?? "", done: false, proposed: false },
+        ];
+        return { ...wd, checklist: next } as ProjectData;
+      });
+      return createdId;
+    },
+  });
+
+  useCopilotAction({
+    name: "setProjectChecklistItem",
+    description: "Update a project's checklist item text and/or done state.",
+    available: "remote",
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target item id (project)." },
+      { name: "checklistItemId", type: "string", required: true, description: "Checklist item id." },
+      { name: "text", type: "string", required: false, description: "New text (optional)." },
+      { name: "done", type: "boolean", required: false, description: "Done status (optional)." },
+    ],
+    handler: ({ itemId, checklistItemId, text, done }: { itemId: string; checklistItemId: string; text?: string; done?: boolean }) => {
+      updateItemData(itemId, (prev) => {
+        const wd = prev as ProjectData;
+        const next = (wd.checklist ?? []).map((it) =>
+          it.id === checklistItemId ? { ...it, ...(typeof text === "string" ? { text } : {}), ...(typeof done === "boolean" ? { done } : {}) } : it
+        );
+        return { ...wd, checklist: next } as ProjectData;
+      });
+    },
+  });
+
+  useCopilotAction({
+    name: "removeProjectChecklistItem",
+    description: "Remove a checklist item from a project by id.",
+    available: "remote",
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target item id (project)." },
+      { name: "checklistItemId", type: "string", required: true, description: "Checklist item id to remove." },
+    ],
+    handler: ({ itemId, checklistItemId }: { itemId: string; checklistItemId: string }) => {
+      updateItemData(itemId, (prev) => {
+        const wd = prev as ProjectData;
+        const next = (wd.checklist ?? []).filter((it) => it.id !== checklistItemId);
+        return { ...wd, checklist: next } as ProjectData;
+      });
+    },
+  });
+
+  // Entity field updates and field3 (tags)
+  useCopilotAction({
+    name: "setEntityField1",
+    description: "Update entity field1 (text).",
+    available: "remote",
+    parameters: [
+      { name: "value", type: "string", required: true, description: "New value for field1." },
+      { name: "itemId", type: "string", required: true, description: "Target item id (entity)." },
+    ],
+    handler: ({ value, itemId }: { value: string; itemId: string }) => {
+      updateItemData(itemId, (prev) => {
+        const anyPrev = prev as any;
+        if (typeof anyPrev.field1 === "string") {
+          return { ...anyPrev, field1: value } as ItemData;
+        }
+        return prev;
+      });
+    },
+  });
+
+  useCopilotAction({
+    name: "setEntityField2",
+    description: "Update entity field2 (select).",
+    available: "remote",
+    parameters: [
+      { name: "value", type: "string", required: true, description: "New value for field2." },
+      { name: "itemId", type: "string", required: true, description: "Target item id (entity)." },
+    ],
+    handler: ({ value, itemId }: { value: string; itemId: string }) => {
+      updateItemData(itemId, (prev) => {
+        const anyPrev = prev as any;
+        if (typeof anyPrev.field2 === "string") {
+          return { ...anyPrev, field2: value } as ItemData;
+        }
+        return prev;
+      });
+    },
+  });
+
+  useCopilotAction({
+    name: "addEntityField3",
+    description: "Add a tag to entity field3 (tags) if not present.",
+    available: "remote",
+    parameters: [
+      { name: "tag", type: "string", required: true, description: "Tag to add." },
+      { name: "itemId", type: "string", required: true, description: "Target item id (entity)." },
+    ],
+    handler: ({ tag, itemId }: { tag: string; itemId: string }) => {
+      updateItemData(itemId, (prev) => {
+        const e = prev as EntityData;
+        const current = new Set<string>(e.tags ?? []);
+        current.add(tag);
+        return { ...e, tags: Array.from(current) } as EntityData;
+      });
+    },
+  });
+
+  useCopilotAction({
+    name: "removeEntityField3",
+    description: "Remove a tag from entity field3 (tags) if present.",
+    available: "remote",
+    parameters: [
+      { name: "tag", type: "string", required: true, description: "Tag to remove." },
+      { name: "itemId", type: "string", required: true, description: "Target item id (entity)." },
+    ],
+    handler: ({ tag, itemId }: { tag: string; itemId: string }) => {
+      updateItemData(itemId, (prev) => {
+        const e = prev as EntityData;
+        return { ...e, tags: (e.tags ?? []).filter((t) => t !== tag) } as EntityData;
+      });
+    },
+  });
+
+  // Chart metrics CRUD
+  useCopilotAction({
+    name: "addChartField1",
+    description: "Add a new metric (field1 entries).",
+    available: "remote",
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target item id (chart)." },
+      { name: "label", type: "string", required: false, description: "Metric label (optional)." },
+      { name: "value", type: "number", required: false, description: "Metric value 0..1000 (optional)." },
+    ],
+    handler: ({ itemId, label, value }: { itemId: string; label?: string; value?: number }) => {
+      let createdId = "";
+      updateItemData(itemId, (prev) => {
+        const cd = prev as ChartData;
+        const next = [...(cd.metrics ?? [])];
+        const safeValue = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(1000, value)) : 0;
+        const id = nanoid();
+        createdId = id;
+        next.push({ id, label: label ?? "", value: safeValue });
+        return { ...cd, metrics: next } as ChartData;
+      });
+      return createdId;
+    },
+  });
+
+  useCopilotAction({
+    name: "setChartField1Label",
+    description: "Update chart field1 entry label by index.",
+    available: "remote",
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target item id (chart)." },
+      { name: "index", type: "number", required: true, description: "Metric index (0-based)." },
+      { name: "label", type: "string", required: true, description: "New metric label." },
+    ],
+    handler: ({ itemId, index, label }: { itemId: string; index: number; label: string }) => {
+      updateItemData(itemId, (prev) => {
+        const cd = prev as ChartData;
+        const next = [...(cd.metrics ?? [])];
+        if (index >= 0 && index < next.length) {
+          next[index] = { ...next[index], label };
+          return { ...cd, metrics: next } as ChartData;
+        }
+        return prev;
+      });
+    },
+  });
+
+  useCopilotAction({
+    name: "setChartField1Value",
+    description: "Update chart field1 entry value by index (0..1000).",
+    available: "remote",
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target item id (chart)." },
+      { name: "index", type: "number", required: true, description: "Metric index (0-based)." },
+      { name: "value", type: "number", required: true, description: "Metric value 0..1000." },
+    ],
+    handler: ({ itemId, index, value }: { itemId: string; index: number; value: number }) => {
+      updateItemData(itemId, (prev) => {
+        const cd = prev as ChartData;
+        const next = [...(cd.metrics ?? [])];
+        if (index >= 0 && index < next.length) {
+          const clamped = Math.max(0, Math.min(1000, value));
+          next[index] = { ...next[index], value: clamped };
+          return { ...cd, metrics: next } as ChartData;
+        }
+        return prev;
+      });
+    },
+  });
+
+  useCopilotAction({
+    name: "removeChartField1",
+    description: "Remove a chart field1 entry by index.",
+    available: "remote",
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target item id (chart)." },
+      { name: "index", type: "number", required: true, description: "Metric index (0-based)." },
+    ],
+    handler: ({ itemId, index }: { itemId: string; index: number }) => {
+      updateItemData(itemId, (prev) => {
+        const cd = prev as ChartData;
+        const next = [...(cd.metrics ?? [])];
+        if (index >= 0 && index < next.length) {
+          next.splice(index, 1);
+          return { ...cd, metrics: next } as ChartData;
         }
         return prev;
       });
@@ -651,7 +965,7 @@ export default function CopilotKitPage() {
             )}>
               {/* Global Title & Description (hidden in JSON view) */}
               {!showJsonView && (
-                <div className="mb-6">
+                <div className="sticky top-0 mb-6">
                   <input
                     value={state?.globalTitle ?? initialState.globalTitle}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
@@ -684,7 +998,7 @@ export default function CopilotKitPage() {
               ) : (
                 <div className="flex-1 py-0 overflow-hidden">
                   {showJsonView ? (
-                    <div className="pb-4 size-full">
+                    <div className="pb-16 size-full">
                       <div className="rounded-2xl border shadow-sm bg-card size-full overflow-auto max-md:text-sm">
                         <ShikiHighlighter language="json" theme="github-light">
                           {JSON.stringify({
@@ -696,7 +1010,7 @@ export default function CopilotKitPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="grid gap-6 lg:grid-cols-2 pb-12">
+                    <div className="grid gap-6 lg:grid-cols-2 pb-20">
                       {(state?.items ?? initialState.items).map((item) => (
                         <article key={item.id} className="relative rounded-2xl border p-5 shadow-sm transition-colors ease-out bg-card hover:border-accent/40 focus-within:border-accent/60">
                           <button
@@ -729,34 +1043,33 @@ export default function CopilotKitPage() {
             </div>
           </div>
           {(state?.items ?? []).length > 0 ? (
-            <div className="flex absolute left-0 bottom-4 w-full justify-center">
-              <div className={cn(
-                "inline-flex rounded-lg shadow-lg bg-card",
-                "[&_button]:bg-card [&_button]:w-22 md:[&_button]:h-10",
-                "[&_button]:shadow-none! [&_button]:hover:bg-accent",
-                "[&_button]:hover:border-accent [&_button]:hover:text-accent",
-                "[&_button]:hover:bg-accent/10!",
-              )}>
-                <NewItemMenu
-                  onSelect={(t) => addItem(t)}
-                  align="center"
-                  className="rounded-r-none border-r-0 peer"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={cn(
-                    "gap-1.25 text-base font-semibold rounded-l-none",
-                    "peer-hover:border-l-accent!",
-                  )}
-                  onClick={() => setShowJsonView((v) => !v)}
-                >
-                  {showJsonView
-                    ? "Canvas"
-                    : <>JSON</>
-                  }
-                </Button>
-              </div>
+            <div className={cn(
+              "absolute left-1/2 -translate-x-1/2 bottom-4",
+              "inline-flex rounded-lg shadow-lg bg-card",
+              "[&_button]:bg-card [&_button]:w-22 md:[&_button]:h-10",
+              "[&_button]:shadow-none! [&_button]:hover:bg-accent",
+              "[&_button]:hover:border-accent [&_button]:hover:text-accent",
+              "[&_button]:hover:bg-accent/10!",
+            )}>
+              <NewItemMenu
+                onSelect={(t) => addItem(t)}
+                align="center"
+                className="rounded-r-none border-r-0 peer"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className={cn(
+                  "gap-1.25 text-base font-semibold rounded-l-none",
+                  "peer-hover:border-l-accent!",
+                )}
+                onClick={() => setShowJsonView((v) => !v)}
+              >
+                {showJsonView
+                  ? "Canvas"
+                  : <>JSON</>
+                }
+              </Button>
             </div>
           ) : null}
         </main>
@@ -844,7 +1157,7 @@ function CardRenderer(props: {
     const d = item.data as NoteData;
     return (
       <div className="mt-4">
-        <label className="mb-1 block text-xs font-medium text-gray-500">Field 1 (e.g., Textarea)</label>
+        <label className="mb-1 block text-xs font-medium text-gray-500">Field 1 (Textarea)</label>
         <TextareaAutosize
           value={d.content ?? ""}
           onChange={(e) => onUpdateData(() => ({ content: e.target.value }))}
@@ -860,34 +1173,83 @@ function CardRenderer(props: {
     const d = item.data as ChartData;
     return (
       <div className="mt-4">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-sm font-medium">Simple Bar Chart</span>
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-sm font-medium">Metrics</span>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+            onClick={() => onUpdateData((prev) => {
+              const cd = prev as ChartData;
+              const id = nanoid();
+              const next = [...(cd.metrics ?? []), { id, label: "", value: "" }];
+              return { ...cd, metrics: next } as ChartData;
+            })}
+          >
+            <Plus className="size-3.5" />
+            Add new
+          </button>
         </div>
         <div className="space-y-3">
-          {d.metrics.map((m, i) => (
-            <div key={`${m.label}-${i}`} className="grid grid-cols-[120px_1fr_40px] items-center gap-3">
-              <span className="text-sm text-muted-foreground">{m.label}</span>
-              <Progress value={m.value} />
+          {(!d.metrics || d.metrics.length === 0) && (
+            <div className="grid place-items-center py-1.75 text-xs text-primary/50 font-medium text-pretty">
+              Nothing here yet. Add a metric to get started.
+            </div>
+          )}
+          {d.metrics.map((m, i) => {
+            const number = String(i + 1).padStart(3, "0");
+            return (
+            <div key={m.id ? m.id : `metric-${i}`} className="flex items-center gap-3">
+              <span className="text-xs font-mono text-muted-foreground/80">{number}</span>
               <input
-                className={cn(
-                  "w-12 rounded-md border px-2 py-1 text-xs outline-none appearance-none [-moz-appearance:textfield]",
-                  "[&::-webkit-outer-spin-button]:[-webkit-appearance:none] [&::-webkit-outer-spin-button]:m-0",
-                  "[&::-webkit-inner-spin-button]:[-webkit-appearance:none] [&::-webkit-inner-spin-button]:m-0",
-                  "transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent",
-                )}
-                type="number"
-                min={0}
-                max={100}
-                value={m.value}
+                value={m.label}
+                placeholder="Metric label"
                 onChange={(e) => onUpdateData((prev) => {
                   const cd = prev as ChartData;
                   const next = [...cd.metrics];
-                  next[i] = { ...next[i], value: Math.max(0, Math.min(100, Number(e.target.value))) };
-                  return { ...cd, metrics: next };
+                  next[i] = { ...next[i], label: e.target.value };
+                  return { ...cd, metrics: next } as ChartData;
                 })}
+                className="w-25 rounded-md border px-2 py-1 text-sm outline-none transition-colors placeholder:text-gray-400 hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent focus:placeholder:text-accent/65"
               />
+              <div className="flex items-center gap-3 flex-1">
+                <Progress value={m.value || 0} />
+              </div>
+              <input
+                className={cn(
+                  "w-10 rounded-md border px-2 py-1 text-xs outline-none appearance-none [-moz-appearance:textfield]",
+                  "[&::-webkit-outer-spin-button]:[-webkit-appearance:none] [&::-webkit-outer-spin-button]:m-0",
+                  "[&::-webkit-inner-spin-button]:[-webkit-appearance:none] [&::-webkit-inner-spin-button]:m-0",
+                  "transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm",
+                  "focus:bg-accent/10 focus:text-accent font-mono",
+                )}
+                type="number"
+                min={0}
+                max={1000}
+                value={m.value}
+                onChange={(e) => onUpdateData((prev) => {
+                  const value = e.target.value;
+                  const cd = prev as ChartData;
+                  const next = [...cd.metrics];
+                  next[i] = { ...next[i], value: value === "" ? "" : Math.max(0, Math.min(100, Number(value))) || 0 };
+                  return { ...cd, metrics: next } as ChartData;
+                })}
+                placeholder="0"
+              />
+              <button
+                type="button"
+                aria-label="Delete metric"
+                className="text-gray-400 hover:text-accent"
+                onClick={() => onUpdateData((prev) => {
+                  const cd = prev as ChartData;
+                  const next = [...cd.metrics];
+                  next.splice(i, 1);
+                  return { ...cd, metrics: next } as ChartData;
+                })}
+              >
+                <X className="h-5 w-5 md:h-6 md:w-6" />
+              </button>
             </div>
-          ))}
+          );})}
         </div>
       </div>
     );
@@ -946,7 +1308,7 @@ function CardRenderer(props: {
                 const wd = prev as ProjectData;
                 const next = [
                   ...(wd.checklist ?? []),
-                  { id: `c${Date.now()}`, text: "", done: false, proposed: false },
+                  { id: nanoid() , text: "", done: false, proposed: false },
                 ];
                 return { ...wd, checklist: next } as ProjectData;
               })}
@@ -975,7 +1337,7 @@ function CardRenderer(props: {
                 />
                 <input
                   value={c.text}
-                  placeholder="Checklist item"
+                  placeholder="Checklist item label"
                   onChange={(e) => onUpdateData((prev) => {
                     const wd = prev as ProjectData;
                     const next = (wd.checklist ?? []).map((it) => it.id === c.id ? { ...it, text: e.target.value } : it);
@@ -1009,7 +1371,7 @@ function CardRenderer(props: {
   return (
     <div className="mt-4">
       <div className="mb-3">
-        <label className="mb-1 block text-xs font-medium text-gray-500">Field 1</label>
+        <label className="mb-1 block text-xs font-medium text-gray-500">Field 1 (Text)</label>
         <input
           value={e.field1}
           onChange={(ev) => setEntity({ field1: ev.target.value })}
@@ -1018,7 +1380,7 @@ function CardRenderer(props: {
         />
       </div>
       <div className="mb-3">
-        <label className="mb-1 block text-xs font-medium text-gray-500">Field 2</label>
+        <label className="mb-1 block text-xs font-medium text-gray-500">Field 2 (Select)</label>
         <select
           value={e.field2}
           onChange={(ev) => setEntity({ field2: ev.target.value })}
@@ -1032,7 +1394,7 @@ function CardRenderer(props: {
         </select>
       </div>
       <div className="mt-4">
-        <label className="mb-1 block text-xs font-medium text-gray-500">Tags</label>
+        <label className="mb-1 block text-xs font-medium text-gray-500">Field 3 (Tags)</label>
         <div className="flex flex-wrap gap-2">
           {(e.tagsAvailable ?? []).map((t) => {
             const active = (e.tags ?? []).includes(t);
