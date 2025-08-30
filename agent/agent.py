@@ -149,8 +149,8 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "   Then, return to the task you are assigned to help the user manage their items.\n"
             "8) Before responding anything having to do with the current values in the state, assume the user might have changed those values since the last message.\n"
             "   Always use these (ground truth) values as the only source of truth when responding.\n"
-            "9) Never disclose any ID property values for any objects in the shared state except for the actual item IDs themselves, if requested.\n"
-            "   All other IDs that are not directly IDs for item instances are not helpful to the user and randomly generated.\n"
+            "9) Generally, do not ask the user for IDs for metrics or checklist items; these IDs are assigned automatically and are immutable.\n"
+            "   You may ask/include item IDs and sub-item IDs (metrics/checklist) in responses when helpful for clarity if there is possible confusion about which item the user is referring to.\n"
             + (f"\nPOST-TOOL POLICY:\n{post_tool_guidance}\n" if post_tool_guidance else "")
         )
     )

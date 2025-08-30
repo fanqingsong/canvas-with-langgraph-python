@@ -12,7 +12,6 @@ import ShikiHighlighter from "react-shiki/web";
 import { Bot } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
-import { nanoid } from "nanoid";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 
@@ -70,7 +69,7 @@ interface NoteData {
 }
 
 interface ChartMetric {
-  id?: string;
+  id: string;
   label: string;
   value: number | ""; // 0..100
 }
@@ -658,12 +657,15 @@ export default function CopilotKitPage() {
       let createdId = "";
       updateItemData(itemId, (prev) => {
         const wd = prev as ProjectData;
-        const nextId = nanoid();
+        const existing = wd.checklist ?? [];
+        const maxNum = existing.reduce((max, it) => {
+          const n = Number.parseInt(String(it.id), 10);
+          return Number.isFinite(n) ? Math.max(max, n) : max;
+        }, 0);
+        const nextNum = maxNum + 1;
+        const nextId = String(nextNum).padStart(3, "0");
         createdId = nextId;
-        const next = [
-          ...(wd.checklist ?? []),
-          { id: nextId, text: text ?? "", done: false, proposed: false },
-        ];
+        const next = [...existing, { id: nextId, text: text ?? "", done: false, proposed: false }];
         return { ...wd, checklist: next } as ProjectData;
       });
       return createdId;
@@ -795,12 +797,17 @@ export default function CopilotKitPage() {
       let createdId = "";
       updateItemData(itemId, (prev) => {
         const cd = prev as ChartData;
-        const next = [...(cd.metrics ?? [])];
         const safeValue = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(1000, value)) : 0;
-        const id = nanoid();
+        const existing = cd.metrics ?? [];
+        const maxNum = existing.reduce((max, it) => {
+          const n = Number.parseInt(String(it.id), 10);
+          return Number.isFinite(n) ? Math.max(max, n) : max;
+        }, 0);
+        const nextNum = maxNum + 1;
+        const id = String(nextNum).padStart(3, "0");
         createdId = id;
-        next.push({ id, label: label ?? "", value: safeValue });
-        return { ...cd, metrics: next } as ChartData;
+        const nextMetrics = [...existing, { id, label: label ?? "", value: safeValue }];
+        return { ...cd, metrics: nextMetrics } as ChartData;
       });
       return createdId;
     },
@@ -1180,8 +1187,14 @@ function CardRenderer(props: {
             className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
             onClick={() => onUpdateData((prev) => {
               const cd = prev as ChartData;
-              const id = nanoid();
-              const next = [...(cd.metrics ?? []), { id, label: "", value: "" }];
+              const existing = cd.metrics ?? [];
+              const maxNum = existing.reduce((max, it) => {
+                const n = Number.parseInt(String(it.id), 10);
+                return Number.isFinite(n) ? Math.max(max, n) : max;
+              }, 0);
+              const nextNum = maxNum + 1;
+              const id = String(nextNum).padStart(3, "0");
+              const next = [...existing, { id, label: "", value: "" }];
               return { ...cd, metrics: next } as ChartData;
             })}
           >
@@ -1196,9 +1209,9 @@ function CardRenderer(props: {
             </div>
           )}
           {d.metrics.map((m, i) => {
-            const number = String(i + 1).padStart(3, "0");
+            const number = String(m.id ?? String(i + 1)).padStart(3, "0");
             return (
-            <div key={m.id ? m.id : `metric-${i}`} className="flex items-center gap-3">
+            <div key={m.id ?? `metric-${i}`} className="flex items-center gap-3">
               <span className="text-xs font-mono text-muted-foreground/80">{number}</span>
               <input
                 value={m.label}
@@ -1306,10 +1319,14 @@ function CardRenderer(props: {
               className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
               onClick={() => onUpdateData((prev) => {
                 const wd = prev as ProjectData;
-                const next = [
-                  ...(wd.checklist ?? []),
-                  { id: nanoid() , text: "", done: false, proposed: false },
-                ];
+                const existing = wd.checklist ?? [];
+                const maxNum = existing.reduce((max, it) => {
+                  const n = Number.parseInt(String(it.id), 10);
+                  return Number.isFinite(n) ? Math.max(max, n) : max;
+                }, 0);
+                const nextNum = maxNum + 1;
+                const id = String(nextNum).padStart(3, "0");
+                const next = [...existing, { id, text: "", done: false, proposed: false }];
                 return { ...wd, checklist: next } as ProjectData;
               })}
             >
@@ -1323,8 +1340,9 @@ function CardRenderer(props: {
                 Nothing here yet. Add a checklist item to get started.
               </div>
             )}
-            {(d.checklist ?? []).map((c) => (
-              <div key={c.id} className="flex items-center gap-2">
+            {(d.checklist ?? []).map((c, i) => (
+              <div key={c.id} className="flex items-center gap-3">
+                <span className="text-xs font-mono text-muted-foreground/80">{String(c.id ?? String(i + 1)).padStart(3, "0")}</span>
                 <input
                   type="checkbox"
                   checked={!!c.done}
