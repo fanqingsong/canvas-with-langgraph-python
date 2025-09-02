@@ -294,6 +294,17 @@ export default function CopilotKitPage() {
         "- chart.data:",
         "  - field1: Array<{id: string, label: string, value: number | ''}> with value in [0..100] or ''",
       ].join("\n");
+      const toolUsageHints = [
+        "TOOL USAGE HINTS:",
+        "- Prefer calling specific actions: setProjectField1, setProjectField2, setProjectField3, addProjectChecklistItem, setProjectChecklistItem, removeProjectChecklistItem.",
+        "- field2 must be one of 'Option A' | 'Option B' | 'Option C'.",
+        "- field3 accepts natural dates (e.g., 'tomorrow', '2025-01-30'); it will be normalized to YYYY-MM-DD.",
+        "- Checklist edits accept either the generated id (e.g., '001') or a numeric index (e.g., '1', 1-based).",
+        "- For charts, values are clamped to [0..100]; empty string clears.",
+        "LOOP CONTROL: When asked to 'add a couple' items, add at most 2 and stop. Avoid repeated calls to the same mutating tool in one turn.",
+        "RANDOMIZATION: If the user specifically asks for random/mock values, you MAY generate and set them right away using the tools (do not block for more details).",
+        "VERIFICATION: After tools run, re-read the latest state and confirm what actually changed.",
+      ].join("\n");
       return [
         "ALWAYS ANSWER FROM SHARED STATE (GROUND TRUTH).",
         "If a command does not specify which item to change, ask the user to clarify before proceeding.",
@@ -302,6 +313,7 @@ export default function CopilotKitPage() {
         "Items (sample):",
         summary || "(none)",
         fieldSchema,
+        toolUsageHints,
       ].join("\n");
     })(),
   });
@@ -660,10 +672,11 @@ export default function CopilotKitPage() {
       { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
     handler: ({ value, itemId }: { value: string; itemId: string }) => {
+      const safeValue = String((value as unknown as string) ?? "");
       updateItemData(itemId, (prev) => {
         const anyPrev = prev as any;
         if (typeof anyPrev.field1 === "string") {
-          return { ...anyPrev, field1: value } as ItemData;
+          return { ...anyPrev, field1: safeValue } as ItemData;
         }
         return prev;
       });
@@ -680,10 +693,11 @@ export default function CopilotKitPage() {
       { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
     handler: ({ value, itemId }: { value: string; itemId: string }) => {
+      const safeValue = String((value as unknown as string) ?? "");
       updateItemData(itemId, (prev) => {
         const anyPrev = prev as any;
         if (typeof anyPrev.field2 === "string") {
-          return { ...anyPrev, field2: value } as ItemData;
+          return { ...anyPrev, field2: safeValue } as ItemData;
         }
         return prev;
       });
@@ -698,11 +712,35 @@ export default function CopilotKitPage() {
       { name: "date", type: "string", required: true, description: "Date in YYYY-MM-DD format." },
       { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
-    handler: ({ date, itemId }: { date: string; itemId: string }) => {
+    handler: (args: { date?: string; itemId: string } & Record<string, unknown>) => {
+      const itemId = String(args.itemId);
+      const rawInput = (args as any).date ?? (args as any).value ?? (args as any).val ?? (args as any).text;
+      const normalizeDate = (input: unknown): string | null => {
+        if (input == null) return null;
+        if (input instanceof Date && !isNaN(input.getTime())) {
+          const yyyy = input.getUTCFullYear();
+          const mm = String(input.getUTCMonth() + 1).padStart(2, "0");
+          const dd = String(input.getUTCDate()).padStart(2, "0");
+          return `${yyyy}-${mm}-${dd}`;
+        }
+        const asString = String(input);
+        // Already in YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(asString)) return asString;
+        const parsed = new Date(asString);
+        if (!isNaN(parsed.getTime())) {
+          const yyyy = parsed.getUTCFullYear();
+          const mm = String(parsed.getUTCMonth() + 1).padStart(2, "0");
+          const dd = String(parsed.getUTCDate()).padStart(2, "0");
+          return `${yyyy}-${mm}-${dd}`;
+        }
+        return null;
+      };
+      const normalized = normalizeDate(rawInput);
+      if (!normalized) return;
       updateItemData(itemId, (prev) => {
         const anyPrev = prev as any;
         if (typeof anyPrev.field3 === "string") {
-          return { ...anyPrev, field3: date } as ItemData;
+          return { ...anyPrev, field3: normalized } as ItemData;
         }
         return prev;
       });
@@ -739,11 +777,35 @@ export default function CopilotKitPage() {
       { name: "text", type: "string", required: false, description: "New text (optional)." },
       { name: "done", type: "boolean", required: false, description: "Done status (optional)." },
     ],
-    handler: ({ itemId, checklistItemId, text, done }: { itemId: string; checklistItemId: string; text?: string; done?: boolean }) => {
+    handler: (args: any) => {
+      const itemId = String(args.itemId ?? "");
+      let target = args.checklistItemId ?? args.id ?? args.index;
+      let targetId = target != null ? String(target) : "";
+      const maybeDone = args.done;
+      const text: string | undefined = args.text != null ? String(args.text) : undefined;
+      const toBool = (v: unknown): boolean | undefined => {
+        if (typeof v === "boolean") return v;
+        if (typeof v === "string") {
+          const s = v.trim().toLowerCase();
+          if (s === "true") return true;
+          if (s === "false") return false;
+        }
+        return undefined;
+      };
+      const done = toBool(maybeDone);
       updateItemData(itemId, (prev) => {
         let next = prev as ProjectData;
-        if (typeof text === "string") next = projectSetField4ItemText(next, checklistItemId, text);
-        if (typeof done === "boolean") next = projectSetField4ItemDone(next, checklistItemId, done);
+        const list = (next.field4 ?? []);
+        // If a plain numeric was provided, allow using it as index (0- or 1-based)
+        if (!list.some((c) => c.id === targetId) && /^\d+$/.test(targetId)) {
+          const n = parseInt(targetId, 10);
+          let idx = -1;
+          if (n >= 0 && n < list.length) idx = n; // 0-based
+          else if (n > 0 && n - 1 < list.length) idx = n - 1; // 1-based
+          if (idx >= 0) targetId = list[idx].id;
+        }
+        if (typeof text === "string") next = projectSetField4ItemText(next, targetId, text);
+        if (typeof done === "boolean") next = projectSetField4ItemDone(next, targetId, done);
         return next;
       });
     },

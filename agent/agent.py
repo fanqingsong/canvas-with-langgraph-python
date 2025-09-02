@@ -89,6 +89,39 @@ backend_tools = [
 # Extract tool names from backend_tools for comparison
 backend_tool_names = [tool.name for tool in backend_tools]
 
+# Frontend tool allowlist to keep tool count under API limits and avoid noise
+FRONTEND_TOOL_ALLOWLIST = set([
+    "setGlobalTitle",
+    "setGlobalDescription",
+    "setItemName",
+    "setItemSubtitle",
+    "setItemDescription",
+    # note
+    "setNoteField1",
+    "appendNoteField1",
+    "clearNoteField1",
+    # project
+    "setProjectField1",
+    "setProjectField2",
+    "setProjectField3",
+    "addProjectChecklistItem",
+    "setProjectChecklistItem",
+    "removeProjectChecklistItem",
+    # entity
+    "setEntityField1",
+    "setEntityField2",
+    "addEntityField3",
+    "removeEntityField3",
+    # chart
+    "addChartField1",
+    "setChartField1Label",
+    "setChartField1Value",
+    "removeChartField1",
+    # items
+    "createItem",
+    "deleteItem",
+])
+
 
 async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Literal["tool_node", "__end__"]]:
     print(f"state: {state}")
@@ -106,17 +139,34 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     # 1. Define the model
     model = ChatOpenAI(model="gpt-4o")
 
-    # 2. Bind the tools to the model
+    # 2. Prepare and bind tools to the model (dedupe, allowlist, and cap)
+    raw_tools = state.get("tools", []) or []
+    deduped_frontend_tools: List[Any] = []
+    seen = set()
+    for t in raw_tools:
+        try:
+            name = getattr(t, "name", None)
+            if not name:
+                continue
+            if name not in FRONTEND_TOOL_ALLOWLIST:
+                continue
+            if name in seen:
+                continue
+            seen.add(name)
+            deduped_frontend_tools.append(t)
+        except Exception:
+            continue
+
+    # cap to well under 128 (OpenAI tools limit), leaving room for backend tools
+    MAX_FRONTEND_TOOLS = 110
+    if len(deduped_frontend_tools) > MAX_FRONTEND_TOOLS:
+        deduped_frontend_tools = deduped_frontend_tools[:MAX_FRONTEND_TOOLS]
+
     model_with_tools = model.bind_tools(
         [
-            *state.get("tools", []), # bind tools defined by ag-ui
+            *deduped_frontend_tools,
             *backend_tools,
-            # your_tool_here
         ],
-
-        # 2.1 Disable parallel tool calls to avoid race conditions,
-        #     enable this for faster performance if you want to manage
-        #     the complexity of running tool calls in parallel.
         parallel_tool_calls=False,
     )
 
@@ -145,6 +195,14 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         "  - field1: Array<{id: string, label: string, value: number | ''}> with value in [0..100] or ''\n"
     )
 
+    loop_control = (
+        "LOOP CONTROL RULES:\n"
+        "1) Never call the same mutating tool repeatedly in a single turn.\n"
+        "2) If asked to 'add a couple' checklist items, add at most 2 and then stop.\n"
+        "3) Avoid creating empty-text checklist items; if you don't have labels, ask once for labels.\n"
+        "4) After a successful mutation (create/update/delete), summarize changes and STOP instead of looping.\n"
+    )
+
     system_message = SystemMessage(
         content=(
             f"globalTitle (ground truth): {global_title}\n"
@@ -152,7 +210,19 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             f"itemsState (ground truth):\n{items_summary}\n"
             f"lastAction (ground truth): {last_action}\n"
             f"activeItemId (ground truth): {active_item_id}\n"
+            f"{loop_control}\n"
             f"{field_schema}\n"
+            "RANDOMIZATION POLICY:\n"
+            "- If the user explicitly requests random/mock/placeholder values, generate plausible values consistent with the FIELD SCHEMA.\n"
+            "  Examples: field2 randomly from {'Option A','Option B','Option C'}; field3 as a random future date within 365 days;\n"
+            "  text fields as short sensible strings. Do not block waiting for details in this case.\n"
+            "MUTATION/TOOL POLICY:\n"
+            "- When you claim to create/update/delete, you MUST call the corresponding tool(s).\n"
+            "- After tools run, re-read the LATEST GROUND TRUTH before replying and confirm exactly what changed.\n"
+            "- Never state a change occurred if the state does not reflect it.\n"
+            "CREATION POLICY:\n"
+            "- If asked to 'create a new project', call createItem with type='project' immediately.\n"
+            "- If also asked to fill fields randomly, set field1/2/3 and add up to 2 checklist items using the relevant tools.\n"
             "STRICT GROUNDING RULES:\n"
             "1) ONLY use globalTitle, globalDescription, itemsState, and activeItemId as the source of truth.\n"
             "   Ignore chat history, prior messages, and assumptions.\n"
