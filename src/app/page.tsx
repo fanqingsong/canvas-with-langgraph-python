@@ -298,25 +298,32 @@ export default function CopilotKitPage() {
         { id: "note", label: "Note" },
         { id: "chart", label: "Chart" },
       ];
-      let selected: CardType = options[0].id;
+      let selected: CardType | "" = "";
       return (
         <div className="rounded-md border bg-white p-4 text-sm shadow">
           <p className="mb-2 font-medium">Select a card type</p>
           <p className="mb-3 text-xs text-gray-600">{(event?.value as any)?.content ?? "Which type of card should I create?"}</p>
           <select
             className="w-full rounded border px-2 py-1"
-            defaultValue={selected}
+            defaultValue=""
             onChange={(e) => {
               selected = e.target.value as CardType;
             }}
           >
+            <option value="" disabled>Select an item type…</option>
             {options.map((opt) => (
               <option key={opt.id} value={opt.id}>{opt.label}</option>
             ))}
           </select>
           <div className="mt-3 flex justify-end gap-2">
             <button className="rounded border px-3 py-1" onClick={() => resolve("")}>Cancel</button>
-            <button className="rounded border bg-blue-600 px-3 py-1 text-white" onClick={() => resolve(selected)}>Use type</button>
+            <button
+              className="rounded border bg-blue-600 px-3 py-1 text-white"
+              onClick={() => selected && resolve(selected)}
+              disabled={!selected}
+            >
+              Use type
+            </button>
           </div>
         </div>
       );
