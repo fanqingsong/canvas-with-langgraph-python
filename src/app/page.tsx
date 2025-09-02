@@ -50,22 +50,22 @@ interface LinkItem {
 type CardType = "project" | "entity" | "note" | "chart";
 
 interface ProjectData {
-  field1: string;
-  field2: string;
-  field3Date: string; // YYYY-MM-DD
-  checklist: ChecklistItem[];
-  checklistsCreated: number;
+  field1: string; // text
+  field2: string; // select
+  field3: string; // date
+  field4: ChecklistItem[]; // checklist
+  field4_id: number; // id counter
 }
 
 interface EntityData {
-  field1: string;
-  field2: string;
-  tagsAvailable: string[];
-  tags: string[];
+  field1: string; // text
+  field2: string; // select
+  field3: string[]; // tags
+  field3_options: string[]; // options
 }
 
 interface NoteData {
-  content?: string;
+  field1?: string; // textarea
 }
 
 interface ChartMetric {
@@ -75,8 +75,8 @@ interface ChartMetric {
 }
 
 interface ChartData {
-  metrics: ChartMetric[];
-  metricsCreated: number;
+  field1: ChartMetric[]; // metrics
+  field1_id: number; // id counter
 }
 
 type ItemData = ProjectData | EntityData | NoteData | ChartData;
@@ -374,10 +374,10 @@ export default function CopilotKitPage() {
   const toggleTag = useCallback((itemId: string, tag: string) => {
     updateItemData(itemId, (prev) => {
       const anyPrev = prev as any;
-      if (Array.isArray(anyPrev.tags)) {
-        const selected = new Set<string>(anyPrev.tags ?? []);
+      if (Array.isArray(anyPrev.field3)) {
+        const selected = new Set<string>(anyPrev.field3 ?? []);
         if (selected.has(tag)) selected.delete(tag); else selected.add(tag);
-        return { ...anyPrev, tags: Array.from(selected) } as ItemData;
+        return { ...anyPrev, field3: Array.from(selected) } as ItemData;
       }
       return prev;
     });
@@ -397,21 +397,21 @@ export default function CopilotKitPage() {
         return {
           field1: "",
           field2: "",
-          field3Date: "",
-          checklist: [],
-          checklistsCreated: 0,
+          field3: "",
+          field4: [],
+          field4_id: 0,
         } as ProjectData;
       case "entity":
         return {
           field1: "",
           field2: "",
-          tagsAvailable: ["Tag 1", "Tag 2", "Tag 3"],
-          tags: [],
+          field3: [],
+          field3_options: ["Tag 1", "Tag 2", "Tag 3"],
         } as EntityData;
       case "note":
-        return { content: "" } as NoteData;
+        return { field1: "" } as NoteData;
       case "chart":
-        return { metrics: [], metricsCreated: 0 } as ChartData;
+        return { field1: [], field1_id: 0 } as ChartData;
       default:
         return { content: "" } as NoteData;
     }
@@ -421,8 +421,8 @@ export default function CopilotKitPage() {
     (itemId: string, tag: string) => {
       updateItemData(itemId, (prev) => {
         const anyPrev = prev as any;
-        if (Array.isArray(anyPrev.tags)) {
-          return { ...anyPrev, tags: (anyPrev.tags as string[]).filter((t) => t !== tag) } as ItemData;
+        if (Array.isArray(anyPrev.field3)) {
+          return { ...anyPrev, field3: (anyPrev.field3 as string[]).filter((t) => t !== tag) } as ItemData;
         }
         return prev;
       });
@@ -521,8 +521,8 @@ export default function CopilotKitPage() {
     ],
     handler: ({ description, itemId }: { description: string; itemId: string }) => {
       updateItemData(itemId, (prev) => {
-        if ((prev as NoteData).content !== undefined) {
-          return { ...(prev as NoteData), content: description } as NoteData;
+        if ((prev as NoteData).field1 !== undefined) {
+          return { ...(prev as NoteData), field1: description } as NoteData;
         }
         return prev;
       });
@@ -541,8 +541,8 @@ export default function CopilotKitPage() {
     handler: ({ value, itemId }: { value: string; itemId: string }) => {
       updateItemData(itemId, (prev) => {
         const nd = prev as NoteData;
-        if (Object.prototype.hasOwnProperty.call(nd, "content")) {
-          return { ...(nd as NoteData), content: value } as NoteData;
+        if (Object.prototype.hasOwnProperty.call(nd, "field1")) {
+          return { ...(nd as NoteData), field1: value } as NoteData;
         }
         return prev;
       });
@@ -561,10 +561,10 @@ export default function CopilotKitPage() {
     handler: ({ value, itemId, withNewline }: { value: string; itemId: string; withNewline?: boolean }) => {
       updateItemData(itemId, (prev) => {
         const nd = prev as NoteData;
-        if (Object.prototype.hasOwnProperty.call(nd, "content")) {
-          const existing = (nd.content ?? "");
+        if (Object.prototype.hasOwnProperty.call(nd, "field1")) {
+          const existing = (nd.field1 ?? "");
           const next = existing + (withNewline ? "\n" : "") + value;
-          return { ...(nd as NoteData), content: next } as NoteData;
+          return { ...(nd as NoteData), field1: next } as NoteData;
         }
         return prev;
       });
@@ -581,8 +581,8 @@ export default function CopilotKitPage() {
     handler: ({ itemId }: { itemId: string }) => {
       updateItemData(itemId, (prev) => {
         const nd = prev as NoteData;
-        if (Object.prototype.hasOwnProperty.call(nd, "content")) {
-          return { ...(nd as NoteData), content: "" } as NoteData;
+        if (Object.prototype.hasOwnProperty.call(nd, "field1")) {
+          return { ...(nd as NoteData), field1: "" } as NoteData;
         }
         return prev;
       });
@@ -639,15 +639,15 @@ export default function CopilotKitPage() {
     handler: ({ date, itemId }: { date: string; itemId: string }) => {
       updateItemData(itemId, (prev) => {
         const anyPrev = prev as any;
-        if (typeof anyPrev.field3Date === "string") {
-          return { ...anyPrev, field3Date: date } as ItemData;
+        if (typeof anyPrev.field3 === "string") {
+          return { ...anyPrev, field3: date } as ItemData;
         }
         return prev;
       });
     },
   });
 
-  // Project checklist CRUD
+  // Project field4 (checklist) CRUD
   useCopilotAction({
     name: "addProjectChecklistItem",
     description: "Add a new checklist item to a project.",
@@ -660,12 +660,12 @@ export default function CopilotKitPage() {
       let createdId = "";
       updateItemData(itemId, (prev) => {
         const wd = prev as ProjectData;
-        const existing = wd.checklist ?? [];
-        const nextCount = (wd.checklistsCreated ?? 0) + 1;
+        const existing = wd.field4 ?? [];
+        const nextCount = (wd.field4_id ?? 0) + 1;
         const id = String(nextCount).padStart(3, "0");
         createdId = id;
         const next = [...existing, { id, text: text ?? "", done: false, proposed: false }];
-        return { ...wd, checklist: next, checklistsCreated: nextCount } as ProjectData;
+        return { ...wd, field4: next, field4_id: nextCount } as ProjectData;
       });
       return createdId;
     },
@@ -684,10 +684,10 @@ export default function CopilotKitPage() {
     handler: ({ itemId, checklistItemId, text, done }: { itemId: string; checklistItemId: string; text?: string; done?: boolean }) => {
       updateItemData(itemId, (prev) => {
         const wd = prev as ProjectData;
-        const next = (wd.checklist ?? []).map((item) =>
+        const next = (wd.field4 ?? []).map((item) =>
           item.id === checklistItemId ? { ...item, ...(typeof text === "string" ? { text } : {}), ...(typeof done === "boolean" ? { done } : {}) } : item
         );
-        return { ...wd, checklist: next } as ProjectData;
+        return { ...wd, field4: next } as ProjectData;
       });
     },
   });
@@ -703,8 +703,8 @@ export default function CopilotKitPage() {
     handler: ({ itemId, checklistItemId }: { itemId: string; checklistItemId: string }) => {
       updateItemData(itemId, (prev) => {
         const wd = prev as ProjectData;
-        const next = (wd.checklist ?? []).filter((item) => item.id !== checklistItemId);
-        return { ...wd, checklist: next } satisfies ProjectData;
+        const next = (wd.field4 ?? []).filter((item) => item.id !== checklistItemId);
+        return { ...wd, field4: next } satisfies ProjectData;
       });
     },
   });
@@ -759,9 +759,9 @@ export default function CopilotKitPage() {
     handler: ({ tag, itemId }: { tag: string; itemId: string }) => {
       updateItemData(itemId, (prev) => {
         const e = prev as EntityData;
-        const current = new Set<string>(e.tags ?? []);
+        const current = new Set<string>((e.field3 ?? []) as string[]);
         current.add(tag);
-        return { ...e, tags: Array.from(current) } as EntityData;
+        return { ...e, field3: Array.from(current) } as EntityData;
       });
     },
   });
@@ -777,12 +777,12 @@ export default function CopilotKitPage() {
     handler: ({ tag, itemId }: { tag: string; itemId: string }) => {
       updateItemData(itemId, (prev) => {
         const e = prev as EntityData;
-        return { ...e, tags: (e.tags ?? []).filter((t) => t !== tag) } as EntityData;
+        return { ...e, field3: ((e.field3 ?? []) as string[]).filter((t) => t !== tag) } as EntityData;
       });
     },
   });
 
-  // Chart metrics CRUD
+  // Chart field1 (metrics) CRUD
   useCopilotAction({
     name: "addChartField1",
     description: "Add a new metric (field1 entries).",
@@ -797,12 +797,12 @@ export default function CopilotKitPage() {
       updateItemData(itemId, (prev) => {
         const cd = prev as ChartData;
         const safeValue = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
-        const existing = cd.metrics ?? [];
-        const nextCount = (cd.metricsCreated ?? 0) + 1;
+        const existing = cd.field1 ?? [];
+        const nextCount = (cd.field1_id ?? 0) + 1;
         const id = String(nextCount).padStart(3, "0");
         createdId = id;
         const nextMetrics = [...existing, { id, label: label ?? "", value: safeValue }];
-        return { ...cd, metrics: nextMetrics, metricsCreated: nextCount } as ChartData;
+        return { ...cd, field1: nextMetrics, field1_id: nextCount } as ChartData;
       });
       return createdId;
     },
@@ -820,10 +820,10 @@ export default function CopilotKitPage() {
     handler: ({ itemId, index, label }: { itemId: string; index: number; label: string }) => {
       updateItemData(itemId, (prev) => {
         const cd = prev as ChartData;
-        const next = [...(cd.metrics ?? [])];
+        const next = [...(cd.field1 ?? [])];
         if (index >= 0 && index < next.length) {
           next[index] = { ...next[index], label };
-          return { ...cd, metrics: next } as ChartData;
+          return { ...cd, field1: next } as ChartData;
         }
         return prev;
       });
@@ -842,11 +842,11 @@ export default function CopilotKitPage() {
     handler: ({ itemId, index, value }: { itemId: string; index: number; value: number }) => {
       updateItemData(itemId, (prev) => {
         const cd = prev as ChartData;
-        const next = [...(cd.metrics ?? [])];
+        const next = [...(cd.field1 ?? [])];
         if (index >= 0 && index < next.length) {
           const clamped = Math.max(0, Math.min(100, value));
           next[index] = { ...next[index], value: clamped };
-          return { ...cd, metrics: next } as ChartData;
+          return { ...cd, field1: next } as ChartData;
         }
         return prev;
       });
@@ -864,10 +864,10 @@ export default function CopilotKitPage() {
     handler: ({ itemId, index }: { itemId: string; index: number }) => {
       updateItemData(itemId, (prev) => {
         const cd = prev as ChartData;
-        const next = [...(cd.metrics ?? [])];
+        const next = [...(cd.field1 ?? [])];
         if (index >= 0 && index < next.length) {
           next.splice(index, 1);
-          return { ...cd, metrics: next } as ChartData;
+          return { ...cd, field1: next } as ChartData;
         }
         return prev;
       });
@@ -1159,10 +1159,10 @@ function CardRenderer(props: {
     const d = item.data as NoteData;
     return (
       <div className="mt-4">
-        <label className="mb-1 block text-xs font-medium text-gray-500">Field 1 (Textarea)</label>
+        <label className="mb-1 block text-xs font-medium text-gray-500">Field 1 (textarea)</label>
         <TextareaAutosize
-          value={d.content ?? ""}
-          onChange={(e) => onUpdateData(() => ({ content: e.target.value }))}
+          value={d.field1 ?? ""}
+          onChange={(e) => onUpdateData(() => ({ field1: e.target.value }))}
           placeholder="Write note..."
           className="min-h-40 w-full resize-none rounded-md border bg-white/60 p-3 text-sm leading-6 outline-none placeholder:text-gray-400 transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent focus:placeholder:text-accent/65"
           minRows={6}
@@ -1176,17 +1176,17 @@ function CardRenderer(props: {
     return (
       <div className="mt-4">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-sm font-medium">Metrics</span>
+          <span className="text-sm font-medium">Field 1 (metrics)</span>
           <button
             type="button"
             className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
             onClick={() => onUpdateData((prev) => {
               const cd = prev as ChartData;
-              const existing = cd.metrics ?? [];
-              const nextCount = (cd.metricsCreated ?? 0) + 1;
+              const existing = cd.field1 ?? [];
+              const nextCount = (cd.field1_id ?? 0) + 1;
               const id = String(nextCount).padStart(3, "0");
               const next = [...existing, { id, label: "", value: "" }];
-              return { ...cd, metrics: next, metricsCreated: nextCount } as ChartData;
+              return { ...cd, field1: next, field1_id: nextCount } as ChartData;
             })}
           >
             <Plus className="size-3.5" />
@@ -1194,12 +1194,12 @@ function CardRenderer(props: {
           </button>
         </div>
         <div className="space-y-3">
-          {(!d.metrics || d.metrics.length === 0) && (
+          {(!d.field1 || d.field1.length === 0) && (
             <div className="grid place-items-center py-1.75 text-xs text-primary/50 font-medium text-pretty">
               Nothing here yet. Add a metric to get started.
             </div>
           )}
-          {d.metrics.map((m, i) => {
+          {d.field1.map((m, i) => {
             const number = String(m.id ?? String(i + 1)).padStart(3, "0");
             return (
             <div key={m.id ?? `metric-${i}`} className="flex items-center gap-3">
@@ -1209,9 +1209,9 @@ function CardRenderer(props: {
                 placeholder="Metric label"
                 onChange={(e) => onUpdateData((prev) => {
                   const cd = prev as ChartData;
-                  const next = [...cd.metrics];
+                  const next = [...(cd.field1 ?? [])];
                   next[i] = { ...next[i], label: e.target.value };
-                  return { ...cd, metrics: next } as ChartData;
+                  return { ...cd, field1: next } as ChartData;
                 })}
                 className="w-25 rounded-md border px-2 py-1 text-sm outline-none transition-colors placeholder:text-gray-400 hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent focus:placeholder:text-accent/65"
               />
@@ -1233,9 +1233,9 @@ function CardRenderer(props: {
                 onChange={(e) => onUpdateData((prev) => {
                   const value = e.target.value;
                   const cd = prev as ChartData;
-                  const next = [...cd.metrics];
+                  const next = [...(cd.field1 ?? [])];
                   next[i] = { ...next[i], value: value === "" ? "" : Math.max(0, Math.min(100, Number(value))) || 0 };
-                  return { ...cd, metrics: next } as ChartData;
+                  return { ...cd, field1: next } as ChartData;
                 })}
                 placeholder="0"
               />
@@ -1245,9 +1245,9 @@ function CardRenderer(props: {
                 className="text-gray-400 hover:text-accent"
                 onClick={() => onUpdateData((prev) => {
                   const cd = prev as ChartData;
-                  const next = [...cd.metrics];
+                  const next = [...(cd.field1 ?? [])];
                   next.splice(i, 1);
-                  return { ...cd, metrics: next } as ChartData;
+                  return { ...cd, field1: next } as ChartData;
                 })}
               >
                 <X className="h-5 w-5 md:h-6 md:w-6" />
@@ -1294,8 +1294,8 @@ function CardRenderer(props: {
             <label className="mb-1 block text-xs font-medium text-gray-500">Field 3 (Date)</label>
             <input
               type="date"
-              value={d.field3Date}
-              onChange={(e) => set({ field3Date: e.target.value })}
+              value={d.field3}
+              onChange={(e) => set({ field3: e.target.value })}
               required
               className="w-full rounded-md border px-2 py-1.5 text-sm outline-none transition-colors hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:shadow-sm focus:bg-accent/10 focus:text-accent invalid:text-gray-400"
             />
@@ -1310,11 +1310,11 @@ function CardRenderer(props: {
               className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
               onClick={() => onUpdateData((prev) => {
                 const wd = prev as ProjectData;
-                const existing = wd.checklist ?? [];
-                const nextCount = (wd.checklistsCreated ?? 0) + 1;
+                const existing = wd.field4 ?? [];
+                const nextCount = (wd.field4_id ?? 0) + 1;
                 const id = String(nextCount).padStart(3, "0");
                 const next = [...existing, { id, text: "", done: false, proposed: false }];
-                return { ...wd, checklist: next, checklistsCreated: nextCount } as ProjectData;
+                return { ...wd, field4: next, field4_id: nextCount } as ProjectData;
               })}
             >
               <Plus className="size-3.5" />
@@ -1322,12 +1322,12 @@ function CardRenderer(props: {
             </button>
           </div>
           <div className="space-y-2">
-            {(!d.checklist || d.checklist.length === 0) && (
+            {(!d.field4 || d.field4.length === 0) && (
               <div className="grid place-items-center py-1.75 text-xs text-primary/50 font-medium text-pretty">
                 Nothing here yet. Add a checklist item to get started.
               </div>
             )}
-            {(d.checklist ?? []).map((c, i) => (
+            {(d.field4 ?? []).map((c, i) => (
               <div key={c.id} className="flex items-center gap-3">
                 <span className="text-xs font-mono text-muted-foreground/80">{String(c.id ?? String(i + 1)).padStart(3, "0")}</span>
                 <input
@@ -1335,8 +1335,8 @@ function CardRenderer(props: {
                   checked={!!c.done}
                   onChange={(e) => onUpdateData((prev) => {
                     const wd = prev as ProjectData;
-                    const next = (wd.checklist ?? []).map((item) => item.id === c.id ? { ...item, done: e.target.checked } : item);
-                    return { ...wd, checklist: next } as ProjectData;
+                    const next = (wd.field4 ?? []).map((item) => item.id === c.id ? { ...item, done: e.target.checked } : item);
+                    return { ...wd, field4: next } as ProjectData;
                   })}
                   className="h-4 w-4"
                 />
@@ -1345,8 +1345,8 @@ function CardRenderer(props: {
                   placeholder="Checklist item label"
                   onChange={(e) => onUpdateData((prev) => {
                     const wd = prev as ProjectData;
-                    const next = (wd.checklist ?? []).map((item) => item.id === c.id ? { ...item, text: e.target.value } : item);
-                    return { ...wd, checklist: next } as ProjectData;
+                    const next = (wd.field4 ?? []).map((item) => item.id === c.id ? { ...item, text: e.target.value } : item);
+                    return { ...wd, field4: next } as ProjectData;
                   })}
                   className="flex-1 rounded-md border px-2 py-1 text-sm outline-none transition-colors placeholder:text-gray-400 hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:bg-accent/10 focus:text-accent focus:placeholder:text-accent/65"
                 />
@@ -1356,8 +1356,8 @@ function CardRenderer(props: {
                   className="text-gray-400 hover:text-accent"
                   onClick={() => onUpdateData((prev) => {
                     const wd = prev as ProjectData;
-                    const next = (wd.checklist ?? []).filter((item) => item.id != c.id);
-                    return { ...wd, checklist: next } as ProjectData;
+                    const next = (wd.field4 ?? []).filter((item) => item.id != c.id);
+                    return { ...wd, field4: next } as ProjectData;
                   })}
                 >
                   <X className="h-5 w-5 md:h-6 md:w-6" />
@@ -1401,8 +1401,8 @@ function CardRenderer(props: {
       <div className="mt-4">
         <label className="mb-1 block text-xs font-medium text-gray-500">Field 3 (Tags)</label>
         <div className="flex flex-wrap gap-2">
-          {(e.tagsAvailable ?? []).map((t) => {
-            const active = (e.tags ?? []).includes(t);
+          {(e.field3 ?? []).map((t) => {
+            const active = (e.field3 ?? []).includes(t);
             return (
               <button
                 key={t}
@@ -1457,7 +1457,7 @@ function TagEditor(props: { tags: string[]; onAdd: (tag: string) => void; onRemo
   };
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border p-2">
-      {tags.map((t) => (
+      {tags.map((t: string) => (
         <span key={t} className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs">
           {t}
           <button className="text-gray-500" onClick={() => onRemove(t)} aria-label={`Remove ${t}`}>
