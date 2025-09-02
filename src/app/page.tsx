@@ -7,9 +7,8 @@ import type React from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { PanelLeftClose, PanelLeftOpen, Users, Plus, X, Braces, LayoutPanelTop, RectangleVertical } from "lucide-react"
+import { Plus, X } from "lucide-react"
 import ShikiHighlighter from "react-shiki/web";
-import { Bot } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -55,6 +54,7 @@ interface ProjectData {
   field2: string;
   field3Date: string; // YYYY-MM-DD
   checklist: ChecklistItem[];
+  checklistsCreated: number;
 }
 
 interface EntityData {
@@ -76,6 +76,7 @@ interface ChartMetric {
 
 interface ChartData {
   metrics: ChartMetric[];
+  metricsCreated: number;
 }
 
 type ItemData = ProjectData | EntityData | NoteData | ChartData;
@@ -94,6 +95,7 @@ interface AgentState {
   globalDescription: string;
   activeItemId: string | null;
   lastAction?: string;
+  itemsCreated: number;
 }
 
 const initialState: AgentState = {
@@ -102,6 +104,7 @@ const initialState: AgentState = {
   globalDescription: "",
   activeItemId: null,
   lastAction: "",
+  itemsCreated: 0,
 };
 
 function useMediaQuery(query: string): boolean {
@@ -178,9 +181,6 @@ export default function CopilotKitPage() {
       setShowJsonView(false);
     }
   }, [state?.items?.length, showJsonView]);
-
-  // No effect needed: JSON is highlighted via react-shiki component
-  
 
   useCoAgentStateRender<AgentState>({
     name: "sample_agent",
@@ -392,6 +392,7 @@ export default function CopilotKitPage() {
           field2: "",
           field3Date: "",
           checklist: [],
+          checklistsCreated: 0,
         } as ProjectData;
       case "entity":
         return {
@@ -403,7 +404,7 @@ export default function CopilotKitPage() {
       case "note":
         return { content: "" } as NoteData;
       case "chart":
-        return { metrics: [] } as ChartData;
+        return { metrics: [], metricsCreated: 0 } as ChartData;
       default:
         return { content: "" } as NoteData;
     }
@@ -422,19 +423,14 @@ export default function CopilotKitPage() {
     [updateItemData]
   );
 
-  const addItem = useCallback((type?: CardType, name?: string) => {
-    const t: CardType = type ?? "project";
+  const addItem = useCallback((type: CardType, name?: string) => {
+    const t: CardType = type;
     let newId = "";
     setState((prev) => {
       const base = prev ?? initialState;
       const items: Item[] = base.items ?? [];
-      const maxNum = items.reduce((max: number, it: Item) => {
-        const isNumericId = /^\d+$/.test(it.id);
-        const numeric = isNumericId ? parseInt(it.id, 10) : NaN;
-        return Number.isFinite(numeric) ? Math.max(max, numeric) : max;
-      }, 0);
-      const nextNum = maxNum + 1;
-      newId = String(nextNum).padStart(4, "0");
+      const nextCount = (base.itemsCreated ?? 0) + 1;
+      newId = String(nextCount).padStart(4, "0");
       const item: Item = {
         id: newId,
         type: t,
@@ -443,7 +439,7 @@ export default function CopilotKitPage() {
         data: defaultDataFor(t),
       };
       const nextItems = [...items, item];
-      return { ...base, items: nextItems, activeItemId: newId } as AgentState;
+      return { ...base, items: nextItems, activeItemId: newId, itemsCreated: nextCount } as AgentState;
     });
     return newId;
   }, [defaultDataFor, setState]);
@@ -658,15 +654,11 @@ export default function CopilotKitPage() {
       updateItemData(itemId, (prev) => {
         const wd = prev as ProjectData;
         const existing = wd.checklist ?? [];
-        const maxNum = existing.reduce((max, it) => {
-          const n = Number.parseInt(String(it.id), 10);
-          return Number.isFinite(n) ? Math.max(max, n) : max;
-        }, 0);
-        const nextNum = maxNum + 1;
-        const nextId = String(nextNum).padStart(3, "0");
-        createdId = nextId;
-        const next = [...existing, { id: nextId, text: text ?? "", done: false, proposed: false }];
-        return { ...wd, checklist: next } as ProjectData;
+        const nextCount = (wd.checklistsCreated ?? 0) + 1;
+        const id = String(nextCount).padStart(3, "0");
+        createdId = id;
+        const next = [...existing, { id, text: text ?? "", done: false, proposed: false }];
+        return { ...wd, checklist: next, checklistsCreated: nextCount } as ProjectData;
       });
       return createdId;
     },
@@ -685,8 +677,8 @@ export default function CopilotKitPage() {
     handler: ({ itemId, checklistItemId, text, done }: { itemId: string; checklistItemId: string; text?: string; done?: boolean }) => {
       updateItemData(itemId, (prev) => {
         const wd = prev as ProjectData;
-        const next = (wd.checklist ?? []).map((it) =>
-          it.id === checklistItemId ? { ...it, ...(typeof text === "string" ? { text } : {}), ...(typeof done === "boolean" ? { done } : {}) } : it
+        const next = (wd.checklist ?? []).map((item) =>
+          item.id === checklistItemId ? { ...item, ...(typeof text === "string" ? { text } : {}), ...(typeof done === "boolean" ? { done } : {}) } : item
         );
         return { ...wd, checklist: next } as ProjectData;
       });
@@ -704,8 +696,8 @@ export default function CopilotKitPage() {
     handler: ({ itemId, checklistItemId }: { itemId: string; checklistItemId: string }) => {
       updateItemData(itemId, (prev) => {
         const wd = prev as ProjectData;
-        const next = (wd.checklist ?? []).filter((it) => it.id !== checklistItemId);
-        return { ...wd, checklist: next } as ProjectData;
+        const next = (wd.checklist ?? []).filter((item) => item.id !== checklistItemId);
+        return { ...wd, checklist: next } satisfies ProjectData;
       });
     },
   });
@@ -791,23 +783,19 @@ export default function CopilotKitPage() {
     parameters: [
       { name: "itemId", type: "string", required: true, description: "Target item id (chart)." },
       { name: "label", type: "string", required: false, description: "Metric label (optional)." },
-      { name: "value", type: "number", required: false, description: "Metric value 0..1000 (optional)." },
+      { name: "value", type: "number", required: false, description: "Metric value 0..100 (optional)." },
     ],
     handler: ({ itemId, label, value }: { itemId: string; label?: string; value?: number }) => {
       let createdId = "";
       updateItemData(itemId, (prev) => {
         const cd = prev as ChartData;
-        const safeValue = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(1000, value)) : 0;
+        const safeValue = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
         const existing = cd.metrics ?? [];
-        const maxNum = existing.reduce((max, it) => {
-          const n = Number.parseInt(String(it.id), 10);
-          return Number.isFinite(n) ? Math.max(max, n) : max;
-        }, 0);
-        const nextNum = maxNum + 1;
-        const id = String(nextNum).padStart(3, "0");
+        const nextCount = (cd.metricsCreated ?? 0) + 1;
+        const id = String(nextCount).padStart(3, "0");
         createdId = id;
         const nextMetrics = [...existing, { id, label: label ?? "", value: safeValue }];
-        return { ...cd, metrics: nextMetrics } as ChartData;
+        return { ...cd, metrics: nextMetrics, metricsCreated: nextCount } as ChartData;
       });
       return createdId;
     },
@@ -837,19 +825,19 @@ export default function CopilotKitPage() {
 
   useCopilotAction({
     name: "setChartField1Value",
-    description: "Update chart field1 entry value by index (0..1000).",
+    description: "Update chart field1 entry value by index (0..100).",
     available: "remote",
     parameters: [
       { name: "itemId", type: "string", required: true, description: "Target item id (chart)." },
       { name: "index", type: "number", required: true, description: "Metric index (0-based)." },
-      { name: "value", type: "number", required: true, description: "Metric value 0..1000." },
+      { name: "value", type: "number", required: true, description: "Metric value 0..100." },
     ],
     handler: ({ itemId, index, value }: { itemId: string; index: number; value: number }) => {
       updateItemData(itemId, (prev) => {
         const cd = prev as ChartData;
         const next = [...(cd.metrics ?? [])];
         if (index >= 0 && index < next.length) {
-          const clamped = Math.max(0, Math.min(1000, value));
+          const clamped = Math.max(0, Math.min(100, value));
           next[index] = { ...next[index], value: clamped };
           return { ...cd, metrics: next } as ChartData;
         }
@@ -884,11 +872,11 @@ export default function CopilotKitPage() {
     description: "Create a new item.",
     available: "remote",
     parameters: [
-      { name: "type", type: "string", required: false, description: "One of: project, entity, note, chart." },
+      { name: "type", type: "string", required: true, description: "One of: project, entity, note, chart." },
       { name: "name", type: "string", required: false, description: "Optional item name." },
     ],
-    handler: ({ type, name }: { type?: string; name?: string }) => {
-      const t = (type as CardType | undefined);
+    handler: ({ type, name }: { type: string; name?: string }) => {
+      const t = (type as CardType);
       addItem(t, name);
     },
   });
@@ -998,7 +986,7 @@ export default function CopilotKitPage() {
                     <h2 className="text-lg font-semibold text-foreground">Nothing here yet</h2>
                     <p className="mt-2 text-sm text-muted-foreground">Create your first item to get started.</p>
                     <div className="mt-6 flex justify-center">
-                      <NewItemMenu onSelect={(t) => addItem(t)} align="center" className="md:h-10" />
+                      <NewItemMenu onSelect={(t: CardType) => addItem(t)} align="center" className="md:h-10" />
                     </div>
                   </div>
                 </EmptyState>
@@ -1059,7 +1047,7 @@ export default function CopilotKitPage() {
               "[&_button]:hover:bg-accent/10!",
             )}>
               <NewItemMenu
-                onSelect={(t) => addItem(t)}
+                onSelect={(t: CardType) => addItem(t)}
                 align="center"
                 className="rounded-r-none border-r-0 peer"
               />
@@ -1188,14 +1176,10 @@ function CardRenderer(props: {
             onClick={() => onUpdateData((prev) => {
               const cd = prev as ChartData;
               const existing = cd.metrics ?? [];
-              const maxNum = existing.reduce((max, it) => {
-                const n = Number.parseInt(String(it.id), 10);
-                return Number.isFinite(n) ? Math.max(max, n) : max;
-              }, 0);
-              const nextNum = maxNum + 1;
-              const id = String(nextNum).padStart(3, "0");
+              const nextCount = (cd.metricsCreated ?? 0) + 1;
+              const id = String(nextCount).padStart(3, "0");
               const next = [...existing, { id, label: "", value: "" }];
-              return { ...cd, metrics: next } as ChartData;
+              return { ...cd, metrics: next, metricsCreated: nextCount } as ChartData;
             })}
           >
             <Plus className="size-3.5" />
@@ -1237,7 +1221,7 @@ function CardRenderer(props: {
                 )}
                 type="number"
                 min={0}
-                max={1000}
+                max={100}
                 value={m.value}
                 onChange={(e) => onUpdateData((prev) => {
                   const value = e.target.value;
@@ -1320,14 +1304,10 @@ function CardRenderer(props: {
               onClick={() => onUpdateData((prev) => {
                 const wd = prev as ProjectData;
                 const existing = wd.checklist ?? [];
-                const maxNum = existing.reduce((max, it) => {
-                  const n = Number.parseInt(String(it.id), 10);
-                  return Number.isFinite(n) ? Math.max(max, n) : max;
-                }, 0);
-                const nextNum = maxNum + 1;
-                const id = String(nextNum).padStart(3, "0");
+                const nextCount = (wd.checklistsCreated ?? 0) + 1;
+                const id = String(nextCount).padStart(3, "0");
                 const next = [...existing, { id, text: "", done: false, proposed: false }];
-                return { ...wd, checklist: next } as ProjectData;
+                return { ...wd, checklist: next, checklistsCreated: nextCount } as ProjectData;
               })}
             >
               <Plus className="size-3.5" />
@@ -1348,7 +1328,7 @@ function CardRenderer(props: {
                   checked={!!c.done}
                   onChange={(e) => onUpdateData((prev) => {
                     const wd = prev as ProjectData;
-                    const next = (wd.checklist ?? []).map((it) => it.id === c.id ? { ...it, done: e.target.checked } : it);
+                    const next = (wd.checklist ?? []).map((item) => item.id === c.id ? { ...item, done: e.target.checked } : item);
                     return { ...wd, checklist: next } as ProjectData;
                   })}
                   className="h-4 w-4"
@@ -1358,7 +1338,7 @@ function CardRenderer(props: {
                   placeholder="Checklist item label"
                   onChange={(e) => onUpdateData((prev) => {
                     const wd = prev as ProjectData;
-                    const next = (wd.checklist ?? []).map((it) => it.id === c.id ? { ...it, text: e.target.value } : it);
+                    const next = (wd.checklist ?? []).map((item) => item.id === c.id ? { ...item, text: e.target.value } : item);
                     return { ...wd, checklist: next } as ProjectData;
                   })}
                   className="flex-1 rounded-md border px-2 py-1 text-sm outline-none transition-colors placeholder:text-gray-400 hover:ring-1 hover:ring-border focus:ring-2 focus:ring-accent/50 focus:bg-accent/10 focus:text-accent focus:placeholder:text-accent/65"
@@ -1369,7 +1349,7 @@ function CardRenderer(props: {
                   className="text-gray-400 hover:text-accent"
                   onClick={() => onUpdateData((prev) => {
                     const wd = prev as ProjectData;
-                    const next = (wd.checklist ?? []).filter((it) => it.id != c.id);
+                    const next = (wd.checklist ?? []).filter((item) => item.id != c.id);
                     return { ...wd, checklist: next } as ProjectData;
                   })}
                 >
