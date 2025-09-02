@@ -45,21 +45,23 @@ def summarize_items_for_prompt(state: AgentState) -> str:
             if itype == "project":
                 field1 = data.get("field1", "")
                 field2 = data.get("field2", "")
-                field3 = data.get("field3Date", "")
-                checklist = ", ".join([c.get("text", "") for c in (data.get("checklist", []) or [])])
-                summary = f"field1={field1} · field2={field2} · field3Date={field3} · checklist=[{checklist}]"
+                field3 = data.get("field3", "")
+                checklist_items = (data.get("field4", []) or [])
+                checklist = ", ".join([c.get("text", "") for c in checklist_items])
+                summary = f"field1={field1} · field2={field2} · field3={field3} · field4=[{checklist}]"
             elif itype == "entity":
                 field1 = data.get("field1", "")
                 field2 = data.get("field2", "")
-                tags = ", ".join(data.get("tags", []) or [])
-                summary = f"field1={field1} · field2={field2} · tags=[{tags}]"
+                tags = ", ".join((data.get("field3", []) or []))
+                summary = f"field1={field1} · field2={field2} · field3(tags)=[{tags}]"
             elif itype == "note":
-                content = data.get("content", "")
+                content = data.get("field1", "")
                 # Include full content so the model has complete visibility for edits
                 summary = f"noteContent=\"{content}\""
             elif itype == "chart":
-                metrics = ", ".join([f"{m.get('label','')}:{m.get('value',0)}%" for m in (data.get("metrics", []) or [])])
-                summary = f"metrics=[{metrics}]"
+                metrics_list = (data.get("field1", []) or [])
+                metrics = ", ".join([f"{m.get('label','')}:{m.get('value', 0)}%" for m in metrics_list])
+                summary = f"field1(metrics)=[{metrics}]"
             lines.append(f"id={pid}{mark} · name={name} · type={itype} · {summary}")
         return "\n".join(lines) if lines else "(no items)"
     except Exception:
@@ -125,6 +127,24 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     active_item_id = state.get('activeItemId', None)
     post_tool_guidance = state.get("__last_tool_guidance", None)
     last_action = state.get("lastAction", "")
+    field_schema = (
+        "FIELD SCHEMA (authoritative):\n"
+        "- project.data:\n"
+        "  - field1: string (text)\n"
+        "  - field2: string (select: 'Option A' | 'Option B' | 'Option C')\n"
+        "  - field3: string (date 'YYYY-MM-DD')\n"
+        "  - field4: ChecklistItem[] where ChecklistItem={id: string, text: string, done: boolean, proposed: boolean}\n"
+        "- entity.data:\n"
+        "  - field1: string\n"
+        "  - field2: string (select: 'Option A' | 'Option B' | 'Option C')\n"
+        "  - field3: string[] (selected tags; subset of field3_options)\n"
+        "  - field3_options: string[] (available tags)\n"
+        "- note.data:\n"
+        "  - field1: string (textarea)\n"
+        "- chart.data:\n"
+        "  - field1: Array<{id: string, label: string, value: number | ''}> with value in [0..100] or ''\n"
+    )
+
     system_message = SystemMessage(
         content=(
             f"globalTitle (ground truth): {global_title}\n"
@@ -132,6 +152,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             f"itemsState (ground truth):\n{items_summary}\n"
             f"lastAction (ground truth): {last_action}\n"
             f"activeItemId (ground truth): {active_item_id}\n"
+            f"{field_schema}\n"
             "STRICT GROUNDING RULES:\n"
             "1) ONLY use globalTitle, globalDescription, itemsState, and activeItemId as the source of truth.\n"
             "   Ignore chat history, prior messages, and assumptions.\n"

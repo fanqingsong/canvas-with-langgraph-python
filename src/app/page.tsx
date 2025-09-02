@@ -277,6 +277,23 @@ export default function CopilotKitPage() {
         .slice(0, 5)
         .map((p: Item) => `id=${p.id} • name=${p.name} • type=${p.type}`)
         .join("\n");
+      const fieldSchema = [
+        "FIELD SCHEMA (authoritative):",
+        "- project.data:",
+        "  - field1: string (text)",
+        "  - field2: string (select: 'Option A' | 'Option B' | 'Option C')",
+        "  - field3: string (date 'YYYY-MM-DD')",
+        "  - field4: ChecklistItem[] where ChecklistItem={id: string, text: string, done: boolean, proposed: boolean}",
+        "- entity.data:",
+        "  - field1: string",
+        "  - field2: string (select: 'Option A' | 'Option B' | 'Option C')",
+        "  - field3: string[] (selected tags; subset of field3_options)",
+        "  - field3_options: string[] (available tags)",
+        "- note.data:",
+        "  - field1: string (textarea)",
+        "- chart.data:",
+        "  - field1: Array<{id: string, label: string, value: number | ''}> with value in [0..100] or ''",
+      ].join("\n");
       return [
         "ALWAYS ANSWER FROM SHARED STATE (GROUND TRUTH).",
         "If a command does not specify which item to change, ask the user to clarify before proceeding.",
@@ -284,6 +301,7 @@ export default function CopilotKitPage() {
         `Global Description: ${gDesc || "(none)"}`,
         "Items (sample):",
         summary || "(none)",
+        fieldSchema,
       ].join("\n");
     })(),
   });
