@@ -968,7 +968,7 @@ export default function CopilotKitPage() {
           <div className="relative overflow-auto size-full px-4 sm:px-8 md:px-10 py-4">
             <div className={cn(
               "relative mx-auto max-w-7xl h-full min-h-8",
-              showJsonView || (state?.items ?? []).length === 0 && "flex flex-col",
+              (showJsonView || (state?.items ?? []).length === 0) && "flex flex-col",
             )}>
               {/* Global Title & Description (hidden in JSON view) */}
               {!showJsonView && (
