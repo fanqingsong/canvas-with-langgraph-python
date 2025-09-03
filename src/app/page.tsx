@@ -94,7 +94,6 @@ interface AgentState {
   items: Item[];
   globalTitle: string;
   globalDescription: string;
-  activeItemId: string | null;
   lastAction?: string;
   itemsCreated: number;
 }
@@ -103,7 +102,6 @@ const initialState: AgentState = {
   items: [],
   globalTitle: "",
   globalDescription: "",
-  activeItemId: null,
   lastAction: "",
   itemsCreated: 0,
 };
@@ -477,8 +475,7 @@ export default function CopilotKitPage() {
       const base = prev ?? initialState;
       const existed = (base.items ?? []).some((p) => p.id === itemId);
       const items: Item[] = (base.items ?? []).filter((p) => p.id !== itemId);
-      const activeItemId = base.activeItemId === itemId ? null : base.activeItemId;
-      return { ...base, items, activeItemId, lastAction: existed ? `deleted:${itemId}` : `not_found:${itemId}` } as AgentState;
+      return { ...base, items, lastAction: existed ? `deleted:${itemId}` : `not_found:${itemId}` } as AgentState;
     });
   }, [setState]);
 
@@ -541,17 +538,12 @@ export default function CopilotKitPage() {
         data: defaultDataFor(t),
       };
       const nextItems = [...items, item];
-      return { ...base, items: nextItems, activeItemId: newId, itemsCreated: nextCount } as AgentState;
+      return { ...base, items: nextItems, itemsCreated: nextCount } as AgentState;
     });
     return newId;
   }, [defaultDataFor, setState]);
 
-  const setActiveItem = useCallback((itemId: string) => {
-    setState((prev) => {
-      const base = prev ?? initialState;
-      return { ...base, activeItemId: itemId } as AgentState;
-    });
-  }, [setState]);
+
 
   // Frontend Actions (exposed as tools to the agent via CopilotKit)
   useCopilotAction({

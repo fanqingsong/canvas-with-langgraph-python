@@ -33,11 +33,9 @@ class AgentState(CopilotKitState):
 def summarize_items_for_prompt(state: AgentState) -> str:
     try:
         items = state.get("items", []) or []
-        active_id = state.get("activeItemId", None)
         lines: List[str] = []
         for p in items:
             pid = p.get("id", "")
-            mark = " (active)" if pid == active_id else ""
             name = p.get("name", "")
             itype = p.get("type", "")
             data = p.get("data", {}) or {}
@@ -62,7 +60,7 @@ def summarize_items_for_prompt(state: AgentState) -> str:
                 metrics_list = (data.get("field1", []) or [])
                 metrics = ", ".join([f"{m.get('label','')}:{m.get('value', 0)}%" for m in metrics_list])
                 summary = f"field1(metrics)=[{metrics}]"
-            lines.append(f"id={pid}{mark} · name={name} · type={itype} · {summary}")
+            lines.append(f"id={pid} · name={name} · type={itype} · {summary}")
         return "\n".join(lines) if lines else "(no items)"
     except Exception:
         return "(unable to summarize items)"
@@ -174,7 +172,6 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     items_summary = summarize_items_for_prompt(state)
     global_title = state.get("globalTitle", "")
     global_description = state.get("globalDescription", "")
-    active_item_id = state.get('activeItemId', None)
     post_tool_guidance = state.get("__last_tool_guidance", None)
     last_action = state.get("lastAction", "")
     field_schema = (
@@ -209,7 +206,6 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             f"globalDescription (ground truth): {global_description}\n"
             f"itemsState (ground truth):\n{items_summary}\n"
             f"lastAction (ground truth): {last_action}\n"
-            f"activeItemId (ground truth): {active_item_id}\n"
             f"{loop_control}\n"
             f"{field_schema}\n"
             "RANDOMIZATION POLICY:\n"
@@ -224,14 +220,14 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "- If asked to 'create a new project', call createItem with type='project' immediately.\n"
             "- If also asked to fill fields randomly, set field1/2/3 and add up to 2 checklist items using the relevant tools.\n"
             "STRICT GROUNDING RULES:\n"
-            "1) ONLY use globalTitle, globalDescription, itemsState, and activeItemId as the source of truth.\n"
+            "1) ONLY use globalTitle, globalDescription, and itemsState as the source of truth.\n"
             "   Ignore chat history, prior messages, and assumptions.\n"
             "2) Before ANY read or write, re-read the latest values above.\n"
             "   Never cache earlier values from this or previous runs.\n"
             "3) If a value is missing or ambiguous, say so and ask a clarifying question.\n"
             "   Do not infer or invent values that are not present.\n"
-            "4) When updating, target the item explicitly by id. If not specified and\n"
-            "   activeItemId is set, use it; otherwise ask the user to choose (HITL).\n"
+            "4) When updating, target the item explicitly by id. If not specified, check lastAction to see if a specific item was mentioned or previously actioned upon,\n"
+            "   and if so, use it; otherwise ask the user to choose (HITL).\n"
             "5) When reporting values, quote exactly what appears in the (ground truth) values mentioned above.\n"
             "   If unknown, reply that you don't know rather than fabricating details.\n"
             "6) If you are asked to do something that is not related to the items, say so and ask a clarifying question.\n"
@@ -300,7 +296,6 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
                 "globalDescription": state.get("globalDescription", ""),
-                "activeItemId": state.get("activeItemId", None),
                 # guidance for follow-up after tool execution
                 "__last_tool_guidance": "If a deletion tool reports success (deleted:ID), acknowledge deletion even if the item no longer exists afterwards."
             }
@@ -315,7 +310,6 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "items": state.get("items", []),
             "globalTitle": state.get("globalTitle", ""),
             "globalDescription": state.get("globalDescription", ""),
-            "activeItemId": state.get("activeItemId", None),
             "__last_tool_guidance": None,
         }
     )
