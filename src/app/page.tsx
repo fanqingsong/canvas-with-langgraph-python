@@ -238,11 +238,11 @@ export default function CopilotKitPage() {
   const [showJsonView, setShowJsonView] = useState<boolean>(false);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const { scrollY } = useScroll({ container: scrollAreaRef });
-  const headerScrollThreshold = 32;
+  const headerScrollThreshold = 64;
   const headerOpacity = useTransform(scrollY, [0, headerScrollThreshold], [1, 0]);
   const [headerDisabled, setHeaderDisabled] = useState<boolean>(false);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
-  const descTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const descTextareaRef = useRef<HTMLInputElement | null>(null);
 
   useMotionValueEvent(scrollY, "change", (y) => {
     const disable = y >= headerScrollThreshold;
@@ -1082,14 +1082,13 @@ export default function CopilotKitPage() {
                     placeholder="Canvas title..."
                     className={cn(titleClasses, "text-2xl font-semibold")}
                   />
-                  <TextareaAutosize
+                  <input
                     ref={descTextareaRef}
                     disabled={headerDisabled}
                     value={state?.globalDescription ?? initialState.globalDescription}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       setState((prev) => ({ ...(prev ?? initialState), globalDescription: e.target.value }))
                     }
-                    minRows={1}
                     placeholder="Canvas description..."
                     className={cn(titleClasses, "mt-2 text-sm leading-6 resize-none overflow-hidden")}
                   />
