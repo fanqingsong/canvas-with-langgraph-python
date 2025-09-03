@@ -6,7 +6,7 @@ It defines the workflow graph, state, tools, nodes and edges.
 from typing import Any, List, Optional, Dict
 from typing_extensions import Literal
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, BaseMessage
+from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain.tools import tool
 from langgraph.graph import StateGraph, END
@@ -89,7 +89,7 @@ def set_plan(steps: List[str]):
     return {"initialized": True, "steps": steps}
 
 @tool
-def update_plan_progress(step_index: int, status: Literal["pending", "in_progress", "completed", "blocked"], note: Optional[str] = None):
+def update_plan_progress(step_index: int, status: Literal["pending", "in_progress", "completed", "blocked", "failed"], note: Optional[str] = None):
     """
     Update a single plan step's status, and optionally add a note.
     """
@@ -298,7 +298,9 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "PLANNING POLICY:\n"
             "- If the user request contains multiple independent actions (e.g., create multiple cards and fill several fields), first propose a short plan (2-6 steps) and call set_plan with the step titles.\n"
             "- Then, for each step: set the step in progress via update_plan_progress, execute the needed tools, and mark the step completed.\n"
-            "- After all steps are completed, call complete_plan and present a concise summary of outcomes.\n"
+            "- When calling update_plan_progress (for 'in_progress', 'completed', or 'failed'), include a concise note describing the action or outcome. Keep notes short.\n"
+            "- Proceed automatically between steps without waiting for user confirmation. Continue until all steps are completed or a failure occurs. If a step cannot be completed, mark it as 'failed' with a helpful note.\n"
+            "- After all steps are completed, call complete_plan to mark the plan finished, then present a concise summary of outcomes.\n"
             "CREATION POLICY:\n"
             "- If asked to create a new project, entity, note, or chart, call createItem with type='<TYPE>' immediately (e.g., 'chart').\n"
             "- If also asked to fill values randomly or with placeholders, populate sensible defaults consistent with FIELD SCHEMA and, for projects/charts, add up to 2 checklist/metric entries using the relevant tools.\n"
@@ -415,6 +417,29 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                     if predicted_plan_steps[i].get("status") != "completed":
                         predicted_plan_steps[i]["status"] = "completed"
                 predicted_plan_status = "completed"
+        # Aggregate overall plan status if not explicitly set
+        if predicted_plan_steps:
+            statuses = [str(s.get("status", "")) for s in predicted_plan_steps]
+            if all(st == "completed" for st in statuses if st):
+                predicted_plan_status = "completed"
+            elif any(st == "failed" for st in statuses):
+                predicted_plan_status = "failed"
+            elif any(st == "in_progress" for st in statuses):
+                predicted_plan_status = "in_progress"
+            elif any(st == "blocked" for st in statuses):
+                predicted_plan_status = "blocked"
+            else:
+                predicted_plan_status = predicted_plan_status or ""
+
+            # If plan is ongoing but no step is active, promote the next pending step to in_progress
+            if predicted_plan_status not in ("completed", "failed"):
+                active_idx = next((i for i, s in enumerate(predicted_plan_steps) if str(s.get("status", "")) == "in_progress"), -1)
+                if active_idx == -1:
+                    pending_idx = next((i for i, s in enumerate(predicted_plan_steps) if str(s.get("status", "")) == "pending"), -1)
+                    if pending_idx != -1:
+                        predicted_plan_steps[pending_idx]["status"] = "in_progress"
+                        predicted_current_index = pending_idx
+                        predicted_plan_status = "in_progress"
         # If we predicted changes, persist them before routing or ending
         plan_updates = {}
         if predicted_plan_steps != plan_steps:
@@ -432,7 +457,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         return Command(
             goto="tool_node",
             update={
-                "messages": [response],
+                "messages": [*(state.get("messages", []) or []), response],
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
@@ -448,11 +473,76 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             }
         )
 
-    # 5. We've handled all tool calls, so we can end the graph.
+    # 5. If there are remaining steps, auto-continue; otherwise end the graph.
+    try:
+        effective_steps = plan_updates.get("planSteps", plan_steps)
+        effective_plan_status = plan_updates.get("planStatus", plan_status)
+        has_remaining = bool(effective_steps) and any(
+            (s.get("status") not in ("completed", "failed")) for s in effective_steps
+        )
+    except Exception:
+        effective_steps = plan_steps
+        effective_plan_status = plan_status
+        has_remaining = False
+
+    if has_remaining and effective_plan_status != "completed":
+        # Auto-continue without injecting a visible user message
+        return Command(
+            goto="chat_node",
+            update={
+                "messages": [*(state.get("messages", []) or []), response],
+                # persist shared state keys so UI edits survive across runs
+                "items": state.get("items", []),
+                "globalTitle": state.get("globalTitle", ""),
+                "globalDescription": state.get("globalDescription", ""),
+                "itemsCreated": state.get("itemsCreated", 0),
+                "lastAction": state.get("lastAction", ""),
+                "planSteps": state.get("planSteps", []),
+                "currentStepIndex": state.get("currentStepIndex", -1),
+                "planStatus": state.get("planStatus", ""),
+                **plan_updates,
+                "__last_tool_guidance": (
+                    "Plan is in progress. Proceed to the next step automatically. "
+                    "Update the step status to in_progress, call necessary tools, add a concise note, "
+                    "and mark it completed when done."
+                ),
+            }
+        )
+
+    # If all steps look completed but planStatus is not yet 'completed', nudge the model to call complete_plan
+    try:
+        all_steps_completed = bool(effective_steps) and all((s.get("status") == "completed") for s in effective_steps)
+        plan_marked_completed = (effective_plan_status == "completed")
+    except Exception:
+        all_steps_completed = False
+        plan_marked_completed = False
+
+    if all_steps_completed and not plan_marked_completed:
+        return Command(
+            goto="chat_node",
+            update={
+                "messages": [*(state.get("messages", []) or []), response],
+                # persist shared state keys so UI edits survive across runs
+                "items": state.get("items", []),
+                "globalTitle": state.get("globalTitle", ""),
+                "globalDescription": state.get("globalDescription", ""),
+                "itemsCreated": state.get("itemsCreated", 0),
+                "lastAction": state.get("lastAction", ""),
+                "planSteps": state.get("planSteps", []),
+                "currentStepIndex": state.get("currentStepIndex", -1),
+                "planStatus": state.get("planStatus", ""),
+                **plan_updates,
+                "__last_tool_guidance": (
+                    "All steps are completed. Call complete_plan to mark the plan as finished, "
+                    "then present a concise summary of outcomes."
+                ),
+            }
+        )
+
     return Command(
         goto=END,
         update={
-            "messages": [response],
+            "messages": [*(state.get("messages", []) or []), response],
             # persist shared state keys so UI edits survive across runs
             "items": state.get("items", []),
             "globalTitle": state.get("globalTitle", ""),

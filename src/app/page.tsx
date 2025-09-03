@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 function NewItemMenu({ onSelect, align = "end", className }: { onSelect: (t: CardType) => void; align?: "start" | "end" | "center", className?: string }) {
   return (
@@ -92,7 +93,7 @@ interface Item {
 
 interface PlanStep {
   title: string;
-  status: "pending" | "in_progress" | "completed" | "blocked";
+  status: "pending" | "in_progress" | "completed" | "blocked" | "failed";
   note?: string;
 }
 
@@ -301,12 +302,13 @@ export default function CopilotKitPage() {
     },
   }); */
 
-  // Render plan steps (agentic generative UI)
+  // Render plan steps in chat once via hook; updates in-place as state changes
   useCoAgentStateRender<AgentState>({
     name: "sample_agent",
+    nodeName: "plan-tracker",
     render: ({ state }) => {
-      type PlanStep = { title?: string; status?: string; note?: string };
-      const steps = (state?.planSteps ?? []) as PlanStep[];
+      type Step = { title?: string; status?: string; note?: string };
+      const steps = (state?.planSteps ?? []) as Step[];
       const currentIdx = typeof state?.currentStepIndex === "number" ? state.currentStepIndex : -1;
       const planStatus = String(state?.planStatus ?? "");
       if (!Array.isArray(steps) || steps.length === 0) return null;
@@ -316,7 +318,8 @@ export default function CopilotKitPage() {
             "ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium border",
             planStatus === "completed" && "text-green-700 border-green-300 bg-green-50",
             planStatus === "in_progress" && "text-blue-700 border-blue-300 bg-blue-50",
-            planStatus !== "completed" && planStatus !== "in_progress" && "text-gray-600 border-gray-300 bg-gray-50",
+            planStatus === "failed" && "text-red-700 border-red-300 bg-red-50",
+            planStatus !== "completed" && planStatus !== "in_progress" && planStatus !== "failed" && "text-gray-600 border-gray-300 bg-gray-50",
           )}
         >
           {planStatus || "pending"}
@@ -330,9 +333,10 @@ export default function CopilotKitPage() {
             </div>
             <ol className="space-y-1">
               {steps.map((s, i) => {
-                const status = (s?.status ?? "pending").toLowerCase();
+                const status = String(s?.status ?? "pending").toLowerCase();
                 const isActive = i === currentIdx && status === "in_progress";
                 const isDone = status === "completed";
+                const isFailed = status === "failed";
                 return (
                   <li key={`${s.title ?? "step"}-${i}`} className="flex items-start gap-2">
                     <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center">
@@ -340,13 +344,28 @@ export default function CopilotKitPage() {
                         <Check className="h-4 w-4 text-green-600" />
                       ) : isActive ? (
                         <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                      ) : isFailed ? (
+                        <X className="h-4 w-4 text-red-600" />
                       ) : (
                         <span className="block h-2 w-2 rounded-full bg-gray-300" />
                       )}
                     </span>
                     <div className="flex-1 text-sm">
-                      <div className={cn("leading-5", isDone && "text-green-700", isActive && "text-blue-700")}>{s.title ?? `Step ${i + 1}`}</div>
-                      {s.note && <div className="text-xs text-muted-foreground">{s.note}</div>}
+                      <div className={cn("leading-5", isDone && "text-green-700", isActive && "text-blue-700", isFailed && "text-red-700")}>{s.title ?? `Step ${i + 1}`}</div>
+                      {s.note ? (
+                        isActive ? (
+                          <div className="text-xs text-muted-foreground">{s.note}</div>
+                        ) : (
+                          <Accordion type="single" collapsible className="mt-0.5">
+                            <AccordionItem value={`note-${i}`}>
+                              <AccordionTrigger className="text-xs text-muted-foreground hover:no-underline">View details</AccordionTrigger>
+                              <AccordionContent>
+                                <div className="text-xs text-muted-foreground whitespace-pre-wrap">{s.note}</div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          </Accordion>
+                        )
+                      ) : null}
                     </div>
                   </li>
                 );
@@ -1231,6 +1250,72 @@ export default function CopilotKitPage() {
                     className={cn(titleClasses, "mt-2 text-sm leading-6 resize-none overflow-hidden")}
                   />
                 </motion.div>
+              )}
+              {/* Persistent Plan Tracker (renders once, outside chat) */}
+              {Array.isArray(state?.planSteps) && state.planSteps.length > 0 && (
+                <div className="my-2 w-full">
+                  <div className="rounded-2xl border shadow-sm bg-card p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      {(() => {
+                        const planStatus = String(state?.planStatus ?? "");
+                        const statusBadge = (
+                          <span
+                            className={cn(
+                              "ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium border",
+                              planStatus === "completed" && "text-green-700 border-green-300 bg-green-50",
+                              planStatus === "in_progress" && "text-blue-700 border-blue-300 bg-blue-50",
+                              planStatus === "failed" && "text-red-700 border-red-300 bg-red-50",
+                              planStatus !== "completed" && planStatus !== "in_progress" && planStatus !== "failed" && "text-gray-600 border-gray-300 bg-gray-50",
+                            )}
+                          >
+                            {planStatus || "pending"}
+                          </span>
+                        );
+                        return <div className="text-sm font-semibold">Plan {statusBadge}</div>;
+                      })()}
+                    </div>
+                    <ol className="space-y-1">
+                      {(state.planSteps as PlanStep[]).map((s, i) => {
+                        const status = String(s?.status ?? "pending").toLowerCase();
+                        const isActive = typeof state?.currentStepIndex === "number" && state.currentStepIndex === i && status === "in_progress";
+                        const isDone = status === "completed";
+                        const isFailed = status === "failed";
+                        return (
+                          <li key={`${s.title ?? "step"}-${i}`} className="flex items-start gap-2">
+                            <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center">
+                              {isDone ? (
+                                <Check className="h-4 w-4 text-green-600" />
+                              ) : isActive ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                              ) : isFailed ? (
+                                <X className="h-4 w-4 text-red-600" />
+                              ) : (
+                                <span className="block h-2 w-2 rounded-full bg-gray-300" />
+                              )}
+                            </span>
+                            <div className="flex-1 text-sm">
+                              <div className={cn("leading-5", isDone && "text-green-700", isActive && "text-blue-700", isFailed && "text-red-700")}>{s.title ?? `Step ${i + 1}`}</div>
+                              {s.note ? (
+                                isActive ? (
+                                  <div className="text-xs text-muted-foreground">{s.note}</div>
+                                ) : (
+                                  <Accordion type="single" collapsible className="mt-0.5">
+                                    <AccordionItem value={`note-${i}`}>
+                                      <AccordionTrigger className="text-xs text-muted-foreground hover:no-underline">View details</AccordionTrigger>
+                                      <AccordionContent>
+                                        <div className="text-xs text-muted-foreground whitespace-pre-wrap">{s.note}</div>
+                                      </AccordionContent>
+                                    </AccordionItem>
+                                  </Accordion>
+                                )
+                              ) : null}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                </div>
               )}
               {(state?.items ?? []).length === 0 ? (
                 <EmptyState className="flex-1">
