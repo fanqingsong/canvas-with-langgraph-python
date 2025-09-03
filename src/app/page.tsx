@@ -303,12 +303,12 @@ export default function CopilotKitPage() {
         "FIELD SCHEMA (authoritative):",
         "- project.data:",
         "  - field1: string (text)",
-        "  - field2: string (select: 'Option A' | 'Option B' | 'Option C')",
+        "  - field2: string (select: 'Option A' | 'Option B' | 'Option C'; empty string means unset)",
         "  - field3: string (date 'YYYY-MM-DD')",
         "  - field4: ChecklistItem[] where ChecklistItem={id: string, text: string, done: boolean, proposed: boolean}",
         "- entity.data:",
         "  - field1: string",
-        "  - field2: string (select: 'Option A' | 'Option B' | 'Option C')",
+        "  - field2: string (select: 'Option A' | 'Option B' | 'Option C'; empty string means unset)",
         "  - field3: string[] (selected tags; subset of field3_options)",
         "  - field3_options: string[] (available tags)",
         "- note.data:",
@@ -319,10 +319,11 @@ export default function CopilotKitPage() {
       const toolUsageHints = [
         "TOOL USAGE HINTS:",
         "- Prefer calling specific actions: setProjectField1, setProjectField2, setProjectField3, addProjectChecklistItem, setProjectChecklistItem, removeProjectChecklistItem.",
-        "- field2 must be one of 'Option A' | 'Option B' | 'Option C'.",
+        "- field2 values: 'Option A' | 'Option B' | 'Option C' | '' (empty clears).",
         "- field3 accepts natural dates (e.g., 'tomorrow', '2025-01-30'); it will be normalized to YYYY-MM-DD.",
         "- Checklist edits accept either the generated id (e.g., '001') or a numeric index (e.g., '1', 1-based).",
-        "- For charts, values are clamped to [0..100]; empty string clears.",
+        "- For charts, values are clamped to [0..100]; use clearChartField1Value to clear an existing metric value.",
+        "- Card subtitle/description keywords (description, overview, summary, caption, blurb) map to setItemSubtitleOrDescription. Never write these to data.field1 for non-note items.",
         "LOOP CONTROL: When asked to 'add a couple' items, add at most 2 and stop. Avoid repeated calls to the same mutating tool in one turn.",
         "RANDOMIZATION: If the user specifically asks for random/mock values, you MAY generate and set them right away using the tools (do not block for more details).",
         "VERIFICATION: After tools run, re-read the latest state and confirm what actually changed.",
@@ -595,11 +596,11 @@ export default function CopilotKitPage() {
 
   // Set item subtitle
   useCopilotAction({
-    name: "setItemSubtitle",
-    description: "Set an item's subtitle (short description).",
+    name: "setItemSubtitleOrDescription",
+    description: "Set an item's description/subtitle (short description or subtitle).",
     available: "remote",
     parameters: [
-      { name: "subtitle", type: "string", required: true, description: "The new item subtitle." },
+      { name: "subtitle", type: "string", required: true, description: "The new item description/subtitle." },
       { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
     handler: ({ subtitle, itemId }: { subtitle: string; itemId: string }) => {
@@ -607,31 +608,14 @@ export default function CopilotKitPage() {
     },
   });
 
-  useCopilotAction({
-    name: "setItemDescription",
-    description: "Set an item's description/subtitle.",
-    available: "remote",
-    parameters: [
-      { name: "description", type: "string", required: true, description: "The new item description/subtitle (note only)." },
-      { name: "itemId", type: "string", required: true, description: "Target item id." },
-    ],
-    handler: ({ description, itemId }: { description: string; itemId: string }) => {
-      updateItemData(itemId, (prev) => {
-        if ((prev as NoteData).field1 !== undefined) {
-          return { ...(prev as NoteData), field1: description } as NoteData;
-        }
-        return prev;
-      });
-    },
-  });
 
   // Note-specific field updates (field numbering)
   useCopilotAction({
     name: "setNoteField1",
-    description: "Update note field1 (textarea).",
+    description: "Update note content (note.data.field1).",
     available: "remote",
     parameters: [
-      { name: "value", type: "string", required: true, description: "New content for field1." },
+      { name: "value", type: "string", required: true, description: "New content for note.data.field1." },
       { name: "itemId", type: "string", required: true, description: "Target item id (note)." },
     ],
     handler: ({ value, itemId }: { value: string; itemId: string }) => {
@@ -647,10 +631,10 @@ export default function CopilotKitPage() {
 
   useCopilotAction({
     name: "appendNoteField1",
-    description: "Append text to note field1 (textarea).",
+    description: "Append text to note content (note.data.field1).",
     available: "remote",
     parameters: [
-      { name: "value", type: "string", required: true, description: "Text to append." },
+      { name: "value", type: "string", required: true, description: "Text to append to note.data.field1." },
       { name: "itemId", type: "string", required: true, description: "Target item id (note)." },
       { name: "withNewline", type: "boolean", required: false, description: "If true, prefix with a newline." },
     ],
@@ -669,7 +653,7 @@ export default function CopilotKitPage() {
 
   useCopilotAction({
     name: "clearNoteField1",
-    description: "Clear note field1 (textarea) content.",
+    description: "Clear note content (note.data.field1).",
     available: "remote",
     parameters: [
       { name: "itemId", type: "string", required: true, description: "Target item id (note)." },
@@ -763,6 +747,25 @@ export default function CopilotKitPage() {
         const anyPrev = prev as any;
         if (typeof anyPrev.field3 === "string") {
           return { ...anyPrev, field3: normalized } as ItemData;
+        }
+        return prev;
+      });
+    },
+  });
+
+  // Clear project field3 (date)
+  useCopilotAction({
+    name: "clearProjectField3",
+    description: "Clear project field3 (date).",
+    available: "remote",
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target item id." },
+    ],
+    handler: ({ itemId }: { itemId: string }) => {
+      updateItemData(itemId, (prev) => {
+        const anyPrev = prev as any;
+        if (typeof anyPrev.field3 === "string") {
+          return { ...anyPrev, field3: "" } as ItemData;
         }
         return prev;
       });
@@ -998,6 +1001,20 @@ export default function CopilotKitPage() {
     ],
     handler: ({ itemId, index, value }: { itemId: string; index: number; value: number }) => {
       updateItemData(itemId, (prev) => chartSetField1Value(prev as ChartData, index, value));
+    },
+  });
+
+  // Clear chart metric value by index
+  useCopilotAction({
+    name: "clearChartField1Value",
+    description: "Clear chart field1 entry value by index (sets to empty).",
+    available: "remote",
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target item id (chart)." },
+      { name: "index", type: "number", required: true, description: "Metric index (0-based)." },
+    ],
+    handler: ({ itemId, index }: { itemId: string; index: number }) => {
+      updateItemData(itemId, (prev) => chartSetField1Value(prev as ChartData, index, ""));
     },
   });
 

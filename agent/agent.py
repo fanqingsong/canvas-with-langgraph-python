@@ -39,6 +39,7 @@ def summarize_items_for_prompt(state: AgentState) -> str:
             name = p.get("name", "")
             itype = p.get("type", "")
             data = p.get("data", {}) or {}
+            subtitle = p.get("subtitle", "")
             summary = ""
             if itype == "project":
                 field1 = data.get("field1", "")
@@ -46,20 +47,23 @@ def summarize_items_for_prompt(state: AgentState) -> str:
                 field3 = data.get("field3", "")
                 checklist_items = (data.get("field4", []) or [])
                 checklist = ", ".join([c.get("text", "") for c in checklist_items])
-                summary = f"field1={field1} · field2={field2} · field3={field3} · field4=[{checklist}]"
+                summary = f"subtitle={subtitle} · field1={field1} · field2={field2} · field3={field3} · field4=[{checklist}]"
             elif itype == "entity":
                 field1 = data.get("field1", "")
                 field2 = data.get("field2", "")
-                tags = ", ".join((data.get("field3", []) or []))
-                summary = f"field1={field1} · field2={field2} · field3(tags)=[{tags}]"
+                selected_tags = (data.get("field3", []) or [])
+                available_tags = (data.get("field3_options", []) or [])
+                tags = ", ".join(selected_tags)
+                opts = ", ".join(available_tags)
+                summary = f"subtitle={subtitle} · field1={field1} · field2={field2} · field3(tags)=[{tags}] · field3_options=[{opts}]"
             elif itype == "note":
                 content = data.get("field1", "")
                 # Include full content so the model has complete visibility for edits
-                summary = f"noteContent=\"{content}\""
+                summary = f"subtitle={subtitle} · noteContent=\"{content}\""
             elif itype == "chart":
                 metrics_list = (data.get("field1", []) or [])
                 metrics = ", ".join([f"{m.get('label','')}:{m.get('value', 0)}%" for m in metrics_list])
-                summary = f"field1(metrics)=[{metrics}]"
+                summary = f"subtitle={subtitle} · field1(metrics)=[{metrics}]"
             lines.append(f"id={pid} · name={name} · type={itype} · {summary}")
         return "\n".join(lines) if lines else "(no items)"
     except Exception:
@@ -92,7 +96,7 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "setGlobalTitle",
     "setGlobalDescription",
     "setItemName",
-    "setItemSubtitle",
+    "setItemSubtitleOrDescription",
     "setItemDescription",
     # note
     "setNoteField1",
@@ -102,6 +106,7 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "setProjectField1",
     "setProjectField2",
     "setProjectField3",
+    "clearProjectField3",
     "addProjectChecklistItem",
     "setProjectChecklistItem",
     "removeProjectChecklistItem",
@@ -114,6 +119,7 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "addChartField1",
     "setChartField1Label",
     "setChartField1Value",
+    "clearChartField1Value",
     "removeChartField1",
     # items
     "createItem",
@@ -205,15 +211,19 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         "  - field2: string (select: 'Option A' | 'Option B' | 'Option C')\n"
         "  - field3: string (date 'YYYY-MM-DD')\n"
         "  - field4: ChecklistItem[] where ChecklistItem={id: string, text: string, done: boolean, proposed: boolean}\n"
+        "  - subtitle: string (card subtitle, not part of data but available for setItemDescription)\n"
         "- entity.data:\n"
         "  - field1: string\n"
         "  - field2: string (select: 'Option A' | 'Option B' | 'Option C')\n"
         "  - field3: string[] (selected tags; subset of field3_options)\n"
         "  - field3_options: string[] (available tags)\n"
+        "  - subtitle: string (card subtitle)\n"
         "- note.data:\n"
-        "  - field1: string (textarea)\n"
+        "  - field1: string (textarea; represents description)\n"
+        "  - subtitle: string (card subtitle)\n"
         "- chart.data:\n"
         "  - field1: Array<{id: string, label: string, value: number | ''}> with value in [0..100] or ''\n"
+        "  - subtitle: string (card subtitle)\n"
     )
 
     loop_control = (
@@ -241,9 +251,21 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "- When you claim to create/update/delete, you MUST call the corresponding tool(s).\n"
             "- After tools run, re-read the LATEST GROUND TRUTH before replying and confirm exactly what changed.\n"
             "- Never state a change occurred if the state does not reflect it.\n"
+            "- To set a card's subtitle (never the data fields): use setItemSubtitleOrDescription.\n"
+            "DESCRIPTION MAPPING:\n"
+            "- For project/entity/chart: treat 'description', 'overview', 'summary', 'caption', 'blurb' as the card subtitle; call setItemSubtitleOrDescription.\n"
+            "- Do NOT write those to data.field1 for any type except notes.\n"
+            "- For notes: 'content', 'description', 'text', or 'note' refers to note content; use setNoteField1/appendNoteField1/clearNoteField1.\n"
+            "- Clearing values:\n"
+            "    · project.field2: setProjectField2 with empty string ('').\n"
+            "    · project.field3: call clearProjectField3.\n"
+            "    · note.field1: call clearNoteField1.\n"
+            "    · chart.metric.value: call clearChartField1Value.\n"
+            "- To add or remove tags on an entity: use addEntityField3/removeEntityField3; available tags are listed under entity.data.field3_options.\n"
             "CREATION POLICY:\n"
             "- If asked to create a new project, entity, note, or chart, call createItem with type='<TYPE>' immediately (e.g., 'chart').\n"
             "- If also asked to fill values randomly or with placeholders, populate sensible defaults consistent with FIELD SCHEMA and, for projects/charts, add up to 2 checklist/metric entries using the relevant tools.\n"
+            "- When asked to 'add a description' or similar during creation, set the card subtitle via setItemSubtitleOrDescription (do not use data.field1).\n"
             "STRICT GROUNDING RULES:\n"
             "1) ONLY use globalTitle, globalDescription, and itemsState as the source of truth.\n"
             "   Ignore chat history, prior messages, and assumptions.\n"
