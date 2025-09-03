@@ -266,21 +266,23 @@ export default function CopilotKitPage() {
     }
   }, [state?.items?.length, showJsonView]);
 
-  // No side effects needed; headerOpacity reacts to container scroll via Motion.
+  // Modern JS does respect insertion order of JS objects, so we can show the keys in a sensible order in the JSON preview
+  const getStatePreviewJSON = (s: AgentState | undefined): Record<string, unknown> => {
+    const snapshot = (s ?? initialState) as AgentState;
+    const { globalTitle, globalDescription, items, ...rest } = snapshot;
+    return {
+      globalTitle: globalTitle ?? initialState.globalTitle,
+      globalDescription: globalDescription ?? initialState.globalDescription,
+      items: items ?? initialState.items,
+    };
+  };
 
   useCoAgentStateRender<AgentState>({
     name: "sample_agent",
     render: ({ state }) => {
-      const items = state?.items ?? initialState.items;
-      const globalTitle = state?.globalTitle ?? initialState.globalTitle;
-      const globalDescription = state?.globalDescription ?? initialState.globalDescription;
       return (
         <pre className="whitespace-pre-wrap text-xs text-violet-600 font-mono w-full overflow-hidden">
-          {JSON.stringify({
-            items,
-            globalTitle,
-            globalDescription,
-          }, null, 2)}
+          {JSON.stringify(getStatePreviewJSON(state), null, 2)}
         </pre>
       );
     },
@@ -1110,11 +1112,7 @@ export default function CopilotKitPage() {
                     <div className="pb-16 size-full">
                       <div className="rounded-2xl border shadow-sm bg-card size-full overflow-auto max-md:text-sm">
                         <ShikiHighlighter language="json" theme="github-light">
-                          {JSON.stringify({
-                            items: state?.items ?? initialState.items,
-                            globalTitle: state?.globalTitle ?? initialState.globalTitle,
-                            globalDescription: state?.globalDescription ?? initialState.globalDescription,
-                          }, null, 2)}
+                          {JSON.stringify(getStatePreviewJSON(state), null, 2)}
                         </ShikiHighlighter>
                       </div>
                     </div>
