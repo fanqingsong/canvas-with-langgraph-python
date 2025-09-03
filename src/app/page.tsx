@@ -1,6 +1,6 @@
 "use client";
 
-import { useCoAgent, useCopilotAction, useCopilotAdditionalInstructions, useLangGraphInterrupt } from "@copilotkit/react-core";
+import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAdditionalInstructions, useLangGraphInterrupt } from "@copilotkit/react-core";
 import { CopilotKitCSSProperties, CopilotChat, CopilotPopup, useChatContext, HeaderProps } from "@copilotkit/react-ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
@@ -300,6 +300,56 @@ export default function CopilotKitPage() {
   const planStepsMemo = (state?.planSteps ?? initialState.planSteps);
   const planStatusMemo = state?.planStatus ?? initialState.planStatus;
   const currentStepIndexMemo = typeof state?.currentStepIndex === "number" ? state.currentStepIndex : initialState.currentStepIndex;
+
+  // One-time final summary renderer in chat when plan completes or fails
+  useCoAgentStateRender<AgentState>({
+    name: "sample_agent",
+    nodeName: "plan-final-summary",
+    render: ({ state }) => {
+      const status = String(state?.planStatus ?? "");
+      const steps = (state?.planSteps ?? []) as PlanStep[];
+      if (!Array.isArray(steps) || steps.length === 0) return null;
+      if (status !== "completed" && status !== "failed") return null;
+      const count = steps.length;
+      return (
+        <div className="my-2 w-full">
+          <Accordion type="single" collapsible defaultValue="done">
+            <AccordionItem value="done">
+              <AccordionTrigger className="text-xs">
+                <span className="inline-flex items-center gap-2">
+                  <Check className={cn("h-4 w-4", status === "completed" ? "text-green-600" : "text-red-600")} />
+                  <span className="font-medium">{count} steps {status}</span>
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="rounded-2xl border shadow-sm bg-card p-4">
+                  <div className="mb-2 text-xs font-semibold">Plan <span className={cn("ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium border", status === "completed" ? "text-green-700 border-green-300 bg-green-50" : "text-red-700 border-red-300 bg-red-50")}>{status}</span></div>
+                  <ol className="space-y-1">
+                    {steps.map((s, i) => (
+                      <li key={`${s.title ?? "step"}-${i}`} className="flex items-start gap-2">
+                        <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center">
+                          {String(s.status).toLowerCase() === "completed" ? (
+                            <Check className="h-4 w-4 text-green-600" />
+                          ) : String(s.status).toLowerCase() === "failed" ? (
+                            <X className="h-4 w-4 text-red-600" />
+                          ) : (
+                            <span className="block h-2 w-2 rounded-full bg-gray-300" />
+                          )}
+                        </span>
+                        <div className="flex-1 text-xs">
+                          <div className={cn("leading-5", String(s.status).toLowerCase() === "completed" && "text-green-700", String(s.status).toLowerCase() === "failed" && "text-red-700")}>{s.title ?? `Step ${i + 1}`}</div>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
+      );
+    },
+  });
 
   // Modern JS does respect insertion order of JS objects, so we can show the keys in a sensible order in the JSON preview
   const getStatePreviewJSON = (s: AgentState | undefined): Record<string, unknown> => {
