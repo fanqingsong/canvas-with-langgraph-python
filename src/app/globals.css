@@ -150,14 +150,17 @@ html {
 
 .copilotKitMessages {
   @apply pr-0!;
+  div:empty {
+    display: none;
+  }
   .copilotKitMessage {
     &, & * {
       @apply font-sans text-sm! subpixel-antialiased leading-normal text-primary!;
     }
     &.copilotKitAssistantMessage {
-      @apply rounded-bl-none! pl-3! mb-4! border-1 border-accent/50! bg-accent/10!;
+      @apply rounded-bl-none! pl-3! mb-10! border-1 border-accent/50! bg-accent/10!;
       .copilotKitMessageControls {
-        @apply mt-3! gap-x-2.5!;
+        @apply mt-3! gap-x-2.5! opacity-100!;
         &, & * {
           @apply text-primary/50! transition-colors!;
         }

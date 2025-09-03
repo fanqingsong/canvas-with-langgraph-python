@@ -6,7 +6,7 @@ It defines the workflow graph, state, tools, nodes and edges.
 from typing import Any, List, Optional, Dict
 from typing_extensions import Literal
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage
+from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
 from langchain.tools import tool
 from langgraph.graph import StateGraph, END
@@ -343,9 +343,9 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     except Exception:
         pass
 
-    # 4.1 Trim long histories to reduce stale context influence
+    # 4.1 Trim long histories to reduce stale context influence and suppress typing flicker
     full_messages = state.get("messages", []) or []
-    trimmed_messages = full_messages[-16:]  # keep the most recent exchanges only
+    trimmed_messages = full_messages[-12:]
 
     # 4.2 Append a final, authoritative state snapshot after chat history
     #
@@ -463,10 +463,19 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     # only route to tool node if tool is not in the tools list
     if route_to_tool_node(response):
         print("routing to tool node")
+        # sanitize assistant text while plan is in progress
+        currently_in_progress = (plan_updates.get("planStatus", plan_status) == "in_progress")
+        sanitized = response
+        try:
+            if currently_in_progress:
+                tcs = getattr(response, "tool_calls", []) or []
+                sanitized = AIMessage(content="", tool_calls=tcs)
+        except Exception:
+            pass
         return Command(
             goto="tool_node",
             update={
-                "messages": [response],
+                "messages": [*(state.get("messages", []) or []), sanitized],
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
@@ -494,12 +503,31 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         effective_plan_status = plan_status
         has_remaining = False
 
+    # Determine if this response contains frontend tool calls that must be delivered to the client
+    try:
+        tool_calls = getattr(response, "tool_calls", []) or []
+    except Exception:
+        tool_calls = []
+    has_frontend_tool_calls = False
+    for tc in tool_calls:
+        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+        if name and name not in backend_tool_names:
+            has_frontend_tool_calls = True
+            break
+
     if has_remaining and effective_plan_status != "completed":
-        # Auto-continue without injecting a visible user message
+        # Auto-continue; include response only if it carries frontend tool calls
+        sanitized = response
+        try:
+            if (plan_updates.get("planStatus", plan_status) == "in_progress"):
+                tcs = getattr(response, "tool_calls", []) or []
+                sanitized = AIMessage(content="", tool_calls=tcs)
+        except Exception:
+            pass
         return Command(
             goto="chat_node",
             update={
-                "messages": [response],
+                "messages": [*(state.get("messages", []) or []), sanitized] if has_frontend_tool_calls else (state.get("messages", []) or []),
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
@@ -512,8 +540,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                 **plan_updates,
                 "__last_tool_guidance": (
                     "Plan is in progress. Proceed to the next step automatically. "
-                    "Update the step status to in_progress, call necessary tools, add a concise note, "
-                    "and mark it completed when done."
+                    "Update the step status to in_progress, call necessary tools, and mark it completed when done."
                 ),
             }
         )
@@ -527,10 +554,16 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         plan_marked_completed = False
 
     if all_steps_completed and not plan_marked_completed:
+        sanitized = response
+        try:
+            tcs = getattr(response, "tool_calls", []) or []
+            sanitized = AIMessage(content="", tool_calls=tcs)
+        except Exception:
+            pass
         return Command(
             goto="chat_node",
             update={
-                "messages": [response],
+                "messages": [*(state.get("messages", []) or []), sanitized] if has_frontend_tool_calls else (state.get("messages", []) or []),
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
@@ -548,10 +581,20 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             }
         )
 
+    # Only show chat messages when not actively in progress; always deliver frontend tool calls
+    currently_in_progress = (plan_updates.get("planStatus", plan_status) == "in_progress")
+    sanitized_final = response
+    try:
+        if currently_in_progress:
+            tcs = getattr(response, "tool_calls", []) or []
+            sanitized_final = AIMessage(content="", tool_calls=tcs)
+    except Exception:
+        pass
+    final_messages = [*(state.get("messages", []) or []), sanitized_final] if (has_frontend_tool_calls or not currently_in_progress) else (state.get("messages", []) or [])
     return Command(
         goto=END,
         update={
-            "messages": [response],
+            "messages": final_messages,
             # persist shared state keys so UI edits survive across runs
             "items": state.get("items", []),
             "globalTitle": state.get("globalTitle", ""),
@@ -575,7 +618,8 @@ def route_to_tool_node(response: BaseMessage):
         return False
 
     for tool_call in tool_calls:
-        if tool_call.get("name") in backend_tool_names:
+        name = tool_call.get("name")
+        if name in backend_tool_names:
             return True
     return False
 

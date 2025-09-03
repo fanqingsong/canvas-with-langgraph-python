@@ -1,11 +1,12 @@
 "use client";
 
-import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAdditionalInstructions, useLangGraphInterrupt } from "@copilotkit/react-core";
+import { useCoAgent, useCopilotAction, useCopilotAdditionalInstructions, useLangGraphInterrupt } from "@copilotkit/react-core";
 import { CopilotKitCSSProperties, CopilotChat, CopilotPopup, useChatContext, HeaderProps } from "@copilotkit/react-ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import { Button } from "@/components/ui/button"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Plus, X, Check, Loader2 } from "lucide-react"
 import ShikiHighlighter from "react-shiki/web";
@@ -317,69 +318,7 @@ export default function CopilotKitPage() {
     },
   }); */
 
-  // Render plan steps in chat once via hook; updates in-place as state changes
-  useCoAgentStateRender<AgentState>({
-    name: "sample_agent",
-    nodeName: "plan-tracker",
-    render: ({ state }) => {
-      type Step = { title?: string; status?: string; note?: string };
-      const steps = (state?.planSteps ?? []) as Step[];
-      const currentIdx = typeof state?.currentStepIndex === "number" ? state.currentStepIndex : -1;
-      const planStatus = String(state?.planStatus ?? "");
-      if (!Array.isArray(steps) || steps.length === 0) return null;
-      const statusBadge = (
-        <span
-          className={cn(
-            "ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium border",
-            planStatus === "completed" && "text-green-700 border-green-300 bg-green-50",
-            planStatus === "in_progress" && "text-blue-700 border-blue-300 bg-blue-50",
-            planStatus === "failed" && "text-red-700 border-red-300 bg-red-50",
-            planStatus !== "completed" && planStatus !== "in_progress" && planStatus !== "failed" && "text-gray-600 border-gray-300 bg-gray-50",
-          )}
-        >
-          {planStatus || "pending"}
-        </span>
-      );
-      return (
-        <div className="my-2 w-full">
-          <div className="rounded-2xl border shadow-sm bg-card p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <div className="text-sm font-semibold">Plan {statusBadge}</div>
-            </div>
-            <ol className="space-y-1">
-              {steps.map((s, i) => {
-                const status = String(s?.status ?? "pending").toLowerCase();
-                const isActive = i === currentIdx && status === "in_progress";
-                const isDone = status === "completed";
-                const isFailed = status === "failed";
-                return (
-                  <li key={`${s.title ?? "step"}-${i}`} className="flex items-start gap-2">
-                    <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center">
-                      {isDone ? (
-                        <Check className="h-4 w-4 text-green-600" />
-                      ) : isActive ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                      ) : isFailed ? (
-                        <X className="h-4 w-4 text-red-600" />
-                      ) : (
-                        <span className="block h-2 w-2 rounded-full bg-gray-300" />
-                      )}
-                    </span>
-                    <div className="flex-1 text-sm">
-                      <div className={cn("leading-5", isDone && "text-green-700", isActive && "text-blue-700", isFailed && "text-red-700")}>{s.title ?? `Step ${i + 1}`}</div>
-                      {s.note ? (
-                        null
-                      ) : null}
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-        </div>
-      );
-    },
-  });
+  // Removed chat hook render; we'll display plan tracker inline in the sidebar header below
 
   // Strengthen grounding: always prefer shared state over chat history
   useCopilotAdditionalInstructions({
@@ -640,7 +579,20 @@ export default function CopilotKitPage() {
         data: defaultDataFor(t),
       };
       const nextItems = [...items, item];
-      return { ...base, items: nextItems, itemsCreated: nextNumber, lastAction: `created:${createdId}` } as AgentState;
+      // clamp to one per type when plan is active
+      const planActive = String(base?.planStatus ?? "") === "in_progress";
+      let deduped = nextItems;
+      if (planActive) {
+        const seen = new Set<string>();
+        deduped = [];
+        for (const it of nextItems) {
+          const key = it.type;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          deduped.push(it);
+        }
+      }
+      return { ...base, items: deduped, itemsCreated: nextNumber, lastAction: `created:${createdId}` } as AgentState;
     });
     return createdId;
   }, [defaultDataFor, setState]);
@@ -1138,6 +1090,12 @@ export default function CopilotKitPage() {
 
       // Per-plan strict idempotency: during an active plan, only one creation per type
       if (planStatus === "in_progress") {
+        // If any item of this type already exists, return its id instead of creating another
+        const existingOfType = (state?.items ?? initialState.items).find((it) => it.type === t);
+        if (existingOfType) {
+          createdByTypeRef.current[t] = existingOfType.id;
+          return existingOfType.id;
+        }
         const existingCreatedId = createdByTypeRef.current[t];
         if (existingCreatedId) {
           return existingCreatedId;
@@ -1204,6 +1162,79 @@ export default function CopilotKitPage() {
           <div className="h-full flex flex-col align-start w-full shadow-lg rounded-2xl border border-sidebar-border overflow-hidden">
             {/* Chat Header */}
             <AppChatHeader />
+            {/* Sidebar Plan Tracker or Completed Summary */}
+            {(() => {
+              const steps = (state?.planSteps ?? []) as PlanStep[];
+              const count = steps.length;
+              const status = String(state?.planStatus ?? "");
+              if (!Array.isArray(steps) || count === 0) return null;
+              if (status === "completed") {
+                return (
+                  <div className="px-4 pt-3 border-b">
+                    <Accordion type="single" collapsible>
+                      <AccordionItem value="done">
+                        <AccordionTrigger className="text-xs pt-0 pb-3">
+                          <span className="inline-flex items-center gap-2">
+                            <Check className="h-4 w-4 text-green-600" />
+                            <span className="font-medium">{count} steps completed</span>
+                          </span>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="rounded-xl border bg-card p-3">
+                            <div className="mb-1 text-xs font-semibold">Plan <span className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium border text-green-700 border-green-300 bg-green-50">completed</span></div>
+                            <ol className="space-y-1">
+                              {steps.map((s, i) => (
+                                <li key={`${s.title ?? "step"}-${i}`} className="flex items-start gap-2">
+                                  <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center">
+                                    <Check className="h-4 w-4 text-green-600" />
+                                  </span>
+                                  <div className="flex-1 text-xs">
+                                    <div className="leading-5 text-green-700">{s.title ?? `Step ${i + 1}`}</div>
+                                  </div>
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </div>
+                );
+              }
+              return (
+                <div className="p-4 py-3 border-b">
+                  <div className="rounded-xl border bg-card p-3">
+                    <div className="mb-1 text-xs font-semibold">Plan <span className="ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium border text-blue-700 border-blue-300 bg-blue-50">in_progress</span></div>
+                    <ol className="space-y-1">
+                      {steps.map((s, i) => {
+                        const st = String(s?.status ?? "pending").toLowerCase();
+                        const isActive = typeof state?.currentStepIndex === "number" && state.currentStepIndex === i && st === "in_progress";
+                        const isDone = st === "completed";
+                        const isFailed = st === "failed";
+                        return (
+                          <li key={`${s.title ?? "step"}-${i}`} className="flex items-start gap-2">
+                            <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center">
+                              {isDone ? (
+                                <Check className="h-4 w-4 text-green-600" />
+                              ) : isActive ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                              ) : isFailed ? (
+                                <X className="h-4 w-4 text-red-600" />
+                              ) : (
+                                <span className="block h-2 w-2 rounded-full bg-gray-300" />
+                              )}
+                            </span>
+                            <div className="flex-1 text-xs">
+                              <div className={cn("leading-5", isDone && "text-green-700", isActive && "text-blue-700", isFailed && "text-red-700")}>{s.title ?? `Step ${i + 1}`}</div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                </div>
+              );
+            })()}
             {/* Chat Content - conditionally rendered to avoid duplicate rendering */}
             {isDesktop && (
               <CopilotChat
