@@ -296,6 +296,11 @@ export default function CopilotKitPage() {
     }
   }, [state?.items?.length, showJsonView]);
 
+  // Prevent sidebar tracker flicker by memoizing derived plan fields
+  const planStepsMemo = (state?.planSteps ?? initialState.planSteps);
+  const planStatusMemo = state?.planStatus ?? initialState.planStatus;
+  const currentStepIndexMemo = typeof state?.currentStepIndex === "number" ? state.currentStepIndex : initialState.currentStepIndex;
+
   // Modern JS does respect insertion order of JS objects, so we can show the keys in a sensible order in the JSON preview
   const getStatePreviewJSON = (s: AgentState | undefined): Record<string, unknown> => {
     const snapshot = (s ?? initialState) as AgentState;
@@ -1167,7 +1172,7 @@ export default function CopilotKitPage() {
               const steps = (state?.planSteps ?? []) as PlanStep[];
               const count = steps.length;
               const status = String(state?.planStatus ?? "");
-              if (!Array.isArray(steps) || count === 0) return null;
+              if (!Array.isArray(steps) || count === 0 || status === "completed" || status === "failed" || status === "") return null;
               if (status === "completed") {
                 return (
                   <div className="px-4 pt-3 border-b">

@@ -6,7 +6,7 @@ It defines the workflow graph, state, tools, nodes and edges.
 from typing import Any, List, Optional, Dict
 from typing_extensions import Literal
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain.tools import tool
 from langgraph.graph import StateGraph, END
@@ -302,7 +302,9 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "- Proceed automatically between steps without waiting for user confirmation. Continue until all steps are completed or a failure occurs. If a step cannot be completed, mark it as 'failed' with a helpful note.\n"
             "- After all steps are completed, call complete_plan to mark the plan finished, then present a concise summary of outcomes.\n"
             "- Do not call complete_plan unless all required deliverables exist (e.g., cards requested by the plan have been created). Verify existence from the latest ground truth before completing.\n"
-            "- While the plan is in progress, DO NOT send regular chat messages between steps. Render progress ONLY via the plan tracker. Send one final summary message AFTER the plan completes or fails.\n"
+            "- You may send brief chat updates between steps, but keep them minimal and consistent with the tracker.\n"
+            "DEPENDENCY HANDLING:\n"
+            "- If step N depends on an artifact from step N-1 (e.g., a created item) and it is missing, immediately mark step N as 'failed' with a short note and continue to the next step.\n"
             "CREATION POLICY:\n"
             "- If asked to create a new project, entity, note, or chart, call createItem with type='<TYPE>' immediately (e.g., 'chart').\n"
             "- If also asked to fill values randomly or with placeholders, populate sensible defaults consistent with FIELD SCHEMA and, for projects/charts, add up to 2 checklist/metric entries using the relevant tools.\n"
@@ -463,19 +465,10 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     # only route to tool node if tool is not in the tools list
     if route_to_tool_node(response):
         print("routing to tool node")
-        # sanitize assistant text while plan is in progress
-        currently_in_progress = (plan_updates.get("planStatus", plan_status) == "in_progress")
-        sanitized = response
-        try:
-            if currently_in_progress:
-                tcs = getattr(response, "tool_calls", []) or []
-                sanitized = AIMessage(content="", tool_calls=tcs)
-        except Exception:
-            pass
         return Command(
             goto="tool_node",
             update={
-                "messages": [*(state.get("messages", []) or []), sanitized],
+                "messages": [*(state.get("messages", []) or []), response],
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
@@ -517,17 +510,10 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
 
     if has_remaining and effective_plan_status != "completed":
         # Auto-continue; include response only if it carries frontend tool calls
-        sanitized = response
-        try:
-            if (plan_updates.get("planStatus", plan_status) == "in_progress"):
-                tcs = getattr(response, "tool_calls", []) or []
-                sanitized = AIMessage(content="", tool_calls=tcs)
-        except Exception:
-            pass
         return Command(
             goto="chat_node",
             update={
-                "messages": [*(state.get("messages", []) or []), sanitized] if has_frontend_tool_calls else (state.get("messages", []) or []),
+                "messages": [*(state.get("messages", []) or []), response] if has_frontend_tool_calls else (state.get("messages", []) or []),
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
@@ -554,16 +540,10 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         plan_marked_completed = False
 
     if all_steps_completed and not plan_marked_completed:
-        sanitized = response
-        try:
-            tcs = getattr(response, "tool_calls", []) or []
-            sanitized = AIMessage(content="", tool_calls=tcs)
-        except Exception:
-            pass
         return Command(
             goto="chat_node",
             update={
-                "messages": [*(state.get("messages", []) or []), sanitized] if has_frontend_tool_calls else (state.get("messages", []) or []),
+                "messages": [*(state.get("messages", []) or []), response] if has_frontend_tool_calls else (state.get("messages", []) or []),
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
@@ -583,14 +563,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
 
     # Only show chat messages when not actively in progress; always deliver frontend tool calls
     currently_in_progress = (plan_updates.get("planStatus", plan_status) == "in_progress")
-    sanitized_final = response
-    try:
-        if currently_in_progress:
-            tcs = getattr(response, "tool_calls", []) or []
-            sanitized_final = AIMessage(content="", tool_calls=tcs)
-    except Exception:
-        pass
-    final_messages = [*(state.get("messages", []) or []), sanitized_final] if (has_frontend_tool_calls or not currently_in_progress) else (state.get("messages", []) or [])
+    final_messages = [*(state.get("messages", []) or []), response] if (has_frontend_tool_calls or not currently_in_progress) else (state.get("messages", []) or [])
     return Command(
         goto=END,
         update={
