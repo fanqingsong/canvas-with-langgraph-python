@@ -241,6 +241,9 @@ export default function CopilotKitPage() {
   const [headerDisabled, setHeaderDisabled] = useState<boolean>(false);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const descTextareaRef = useRef<HTMLInputElement | null>(null);
+  const lastCreationRef = useRef<{ type: CardType; name: string; id: string; ts: number } | null>(null);
+  const lastChecklistCreationRef = useRef<Record<string, { text: string; id: string; ts: number }>>({});
+  const lastMetricCreationRef = useRef<Record<string, { label: string; value: number | ""; id: string; ts: number }>>({});
 
   useMotionValueEvent(scrollY, "change", (y) => {
     const disable = y >= headerScrollThreshold;
@@ -524,23 +527,29 @@ export default function CopilotKitPage() {
 
   const addItem = useCallback((type: CardType, name?: string) => {
     const t: CardType = type;
-    let newId = "";
+    let createdId = "";
     setState((prev) => {
       const base = prev ?? initialState;
       const items: Item[] = base.items ?? [];
-      const nextCount = (base.itemsCreated ?? 0) + 1;
-      newId = String(nextCount).padStart(4, "0");
+      // Derive next numeric id robustly from both itemsCreated counter and max existing id
+      const maxExisting = items.reduce((max, it) => {
+        const parsed = Number.parseInt(String(it.id ?? "0"), 10);
+        return Number.isFinite(parsed) ? Math.max(max, parsed) : max;
+      }, 0);
+      const priorCount = Number.isFinite(base.itemsCreated) ? (base.itemsCreated as number) : 0;
+      const nextNumber = Math.max(priorCount, maxExisting) + 1;
+      createdId = String(nextNumber).padStart(4, "0");
       const item: Item = {
-        id: newId,
+        id: createdId,
         type: t,
         name: name && name.trim() ? name.trim() : "",
         subtitle: "",
         data: defaultDataFor(t),
       };
       const nextItems = [...items, item];
-      return { ...base, items: nextItems, itemsCreated: nextCount } as AgentState;
+      return { ...base, items: nextItems, itemsCreated: nextNumber, lastAction: `created:${createdId}` } as AgentState;
     });
-    return newId;
+    return createdId;
   }, [defaultDataFor, setState]);
 
 
@@ -770,12 +779,28 @@ export default function CopilotKitPage() {
       { name: "text", type: "string", required: false, description: "Initial checklist text (optional)." },
     ],
     handler: ({ itemId, text }: { itemId: string; text?: string }) => {
+      const norm = (text ?? "").trim();
+      // 1) If a checklist item with same text exists, return its id
+      const project = (state?.items ?? initialState.items).find((it) => it.id === itemId);
+      if (project && project.type === "project") {
+        const list = ((project.data as ProjectData).field4 ?? []);
+        const dup = norm ? list.find((c) => (c.text ?? "").trim() === norm) : undefined;
+        if (dup) return dup.id;
+      }
+      // 2) Per-project throttle to avoid rapid duplicates
+      const now = Date.now();
+      const key = `${itemId}`;
+      const recent = lastChecklistCreationRef.current[key];
+      if (recent && recent.text === norm && now - recent.ts < 800) {
+        return recent.id;
+      }
       let createdId = "";
       updateItemData(itemId, (prev) => {
         const { next, createdId: id } = projectAddField4Item(prev as ProjectData, text);
         createdId = id;
         return next;
       });
+      lastChecklistCreationRef.current[key] = { text: norm, id: createdId, ts: now };
       return createdId;
     },
   });
@@ -921,12 +946,29 @@ export default function CopilotKitPage() {
       { name: "value", type: "number", required: false, description: "Metric value 0..100 (optional)." },
     ],
     handler: ({ itemId, label, value }: { itemId: string; label?: string; value?: number }) => {
+      const normLabel = (label ?? "").trim();
+      // 1) If a metric with same label exists, return its id
+      const item = (state?.items ?? initialState.items).find((it) => it.id === itemId);
+      if (item && item.type === "chart") {
+        const list = ((item.data as ChartData).field1 ?? []);
+        const dup = normLabel ? list.find((m) => (m.label ?? "").trim() === normLabel) : undefined;
+        if (dup) return dup.id;
+      }
+      // 2) Per-chart throttle to avoid rapid duplicates
+      const now = Date.now();
+      const key = `${itemId}`;
+      const recent = lastMetricCreationRef.current[key];
+      const valKey: number | "" = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : "";
+      if (recent && recent.label === normLabel && recent.value === valKey && now - recent.ts < 800) {
+        return recent.id;
+      }
       let createdId = "";
       updateItemData(itemId, (prev) => {
         const { next, createdId: id } = chartAddField1Metric(prev as ChartData, label, value);
         createdId = id;
         return next;
       });
+      lastMetricCreationRef.current[key] = { label: normLabel, value: valKey, id: createdId, ts: now };
       return createdId;
     },
   });
@@ -982,7 +1024,23 @@ export default function CopilotKitPage() {
     ],
     handler: ({ type, name }: { type: string; name?: string }) => {
       const t = (type as CardType);
-      addItem(t, name);
+      const normalized = (name ?? "").trim();
+      // 1) Name-based idempotency: if an item with same type+name exists, return it
+      if (normalized) {
+        const existing = (state?.items ?? initialState.items).find((it) => it.type === t && (it.name ?? "").trim() === normalized);
+        if (existing) {
+          return existing.id;
+        }
+      }
+      // 2) Per-run throttle: avoid duplicate creations within a short window for identical type+name
+      const now = Date.now();
+      const recent = lastCreationRef.current;
+      if (recent && recent.type === t && (recent.name ?? "") === normalized && now - recent.ts < 1000) {
+        return recent.id;
+      }
+      const id = addItem(t, name);
+      lastCreationRef.current = { type: t, name: normalized, id, ts: now };
+      return id;
     },
   });
 

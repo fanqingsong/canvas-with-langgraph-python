@@ -138,22 +138,46 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     model = ChatOpenAI(model="gpt-4o")
 
     # 2. Prepare and bind tools to the model (dedupe, allowlist, and cap)
-    raw_tools = state.get("tools", []) or []
-    deduped_frontend_tools: List[Any] = []
-    seen = set()
-    for t in raw_tools:
+    def _extract_tool_name(tool: Any) -> Optional[str]:
+        """Extract a tool name from either a LangChain tool or an OpenAI function spec dict."""
         try:
-            name = getattr(t, "name", None)
-            if not name:
-                continue
-            if name not in FRONTEND_TOOL_ALLOWLIST:
-                continue
-            if name in seen:
-                continue
-            seen.add(name)
-            deduped_frontend_tools.append(t)
+            # OpenAI tool spec dict: { "type": "function", "function": { "name": "..." } }
+            if isinstance(tool, dict):
+                fn = tool.get("function", {}) if isinstance(tool.get("function", {}), dict) else {}
+                name = fn.get("name") or tool.get("name")
+                if isinstance(name, str) and name.strip():
+                    return name
+                return None
+            # LangChain tool object or @tool-decorated function
+            name = getattr(tool, "name", None)
+            if isinstance(name, str) and name.strip():
+                return name
+            return None
         except Exception:
+            return None
+
+    # Frontend tools may arrive either under state["tools"] or within the CopilotKit envelope
+    raw_tools = (state.get("tools", []) or [])
+    try:
+        ck = state.get("copilotkit", {}) or {}
+        raw_actions = ck.get("actions", []) or []
+        if isinstance(raw_actions, list) and raw_actions:
+            raw_tools = [*raw_tools, *raw_actions]
+    except Exception:
+        pass
+
+    deduped_frontend_tools: List[Any] = []
+    seen: set[str] = set()
+    for t in raw_tools:
+        name = _extract_tool_name(t)
+        if not name:
             continue
+        if name not in FRONTEND_TOOL_ALLOWLIST:
+            continue
+        if name in seen:
+            continue
+        seen.add(name)
+        deduped_frontend_tools.append(t)
 
     # cap to well under 128 (OpenAI tools limit), leaving room for backend tools
     MAX_FRONTEND_TOOLS = 110
@@ -198,6 +222,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         "2) If asked to 'add a couple' checklist items, add at most 2 and then stop.\n"
         "3) Avoid creating empty-text checklist items; if you don't have labels, ask once for labels.\n"
         "4) After a successful mutation (create/update/delete), summarize changes and STOP instead of looping.\n"
+        "5) If lastAction starts with 'created:', DO NOT call createItem again unless the user explicitly asks to create another item.\n"
     )
 
     system_message = SystemMessage(
@@ -217,8 +242,8 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "- After tools run, re-read the LATEST GROUND TRUTH before replying and confirm exactly what changed.\n"
             "- Never state a change occurred if the state does not reflect it.\n"
             "CREATION POLICY:\n"
-            "- If asked to 'create a new project', call createItem with type='project' immediately.\n"
-            "- If also asked to fill fields randomly, set field1/2/3 and add up to 2 checklist items using the relevant tools.\n"
+            "- If asked to create a new project, entity, note, or chart, call createItem with type='<TYPE>' immediately (e.g., 'chart').\n"
+            "- If also asked to fill values randomly or with placeholders, populate sensible defaults consistent with FIELD SCHEMA and, for projects/charts, add up to 2 checklist/metric entries using the relevant tools.\n"
             "STRICT GROUNDING RULES:\n"
             "1) ONLY use globalTitle, globalDescription, and itemsState as the source of truth.\n"
             "   Ignore chat history, prior messages, and assumptions.\n"
@@ -296,6 +321,8 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
                 "globalDescription": state.get("globalDescription", ""),
+                "itemsCreated": state.get("itemsCreated", 0),
+                "lastAction": state.get("lastAction", ""),
                 # guidance for follow-up after tool execution
                 "__last_tool_guidance": "If a deletion tool reports success (deleted:ID), acknowledge deletion even if the item no longer exists afterwards."
             }
@@ -310,6 +337,8 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "items": state.get("items", []),
             "globalTitle": state.get("globalTitle", ""),
             "globalDescription": state.get("globalDescription", ""),
+            "itemsCreated": state.get("itemsCreated", 0),
+            "lastAction": state.get("lastAction", ""),
             "__last_tool_guidance": None,
         }
     )
