@@ -30,6 +30,10 @@ class AgentState(CopilotKitState):
     globalTitle: str = ""
     globalDescription: str = ""
     # No active item; all actions should specify an item identifier
+    # Planning state
+    planSteps: List[Dict[str, Any]] = []
+    currentStepIndex: int = -1
+    planStatus: str = ""
 def summarize_items_for_prompt(state: AgentState) -> str:
     try:
         items = state.get("items", []) or []
@@ -77,6 +81,27 @@ def get_weather(location: str):
     """
     return f"The weather for {location} is 70 degrees."
 
+@tool
+def set_plan(steps: List[str]):
+    """
+    Initialize a plan consisting of step descriptions. Resets progress and sets status to 'in_progress'.
+    """
+    return {"initialized": True, "steps": steps}
+
+@tool
+def update_plan_progress(step_index: int, status: Literal["pending", "in_progress", "completed", "blocked"], note: Optional[str] = None):
+    """
+    Update a single plan step's status, and optionally add a note.
+    """
+    return {"updated": True, "index": step_index, "status": status, "note": note}
+
+@tool
+def complete_plan():
+    """
+    Mark the plan as completed.
+    """
+    return {"completed": True}
+
 # @tool
 # def your_tool_here(your_arg: str):
 #     """Your tool description here."""
@@ -84,8 +109,10 @@ def get_weather(location: str):
 #     return "Your tool response here."
 
 backend_tools = [
-    get_weather
-    # your_tool_here
+    get_weather,
+    set_plan,
+    update_plan_progress,
+    complete_plan,
 ]
 
 # Extract tool names from backend_tools for comparison
@@ -204,6 +231,9 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     global_description = state.get("globalDescription", "")
     post_tool_guidance = state.get("__last_tool_guidance", None)
     last_action = state.get("lastAction", "")
+    plan_steps = state.get("planSteps", []) or []
+    current_step_index = state.get("currentStepIndex", -1)
+    plan_status = state.get("planStatus", "")
     field_schema = (
         "FIELD SCHEMA (authoritative):\n"
         "- project.data:\n"
@@ -241,6 +271,9 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             f"globalDescription (ground truth): {global_description}\n"
             f"itemsState (ground truth):\n{items_summary}\n"
             f"lastAction (ground truth): {last_action}\n"
+            f"planStatus (ground truth): {plan_status}\n"
+            f"currentStepIndex (ground truth): {current_step_index}\n"
+            f"planSteps (ground truth): {[s.get('title', s) for s in plan_steps]}\n"
             f"{loop_control}\n"
             f"{field_schema}\n"
             "RANDOMIZATION POLICY:\n"
@@ -262,6 +295,10 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "    · note.field1: call clearNoteField1.\n"
             "    · chart.metric.value: call clearChartField1Value.\n"
             "- To add or remove tags on an entity: use addEntityField3/removeEntityField3; available tags are listed under entity.data.field3_options.\n"
+            "PLANNING POLICY:\n"
+            "- If the user request contains multiple independent actions (e.g., create multiple cards and fill several fields), first propose a short plan (2-6 steps) and call set_plan with the step titles.\n"
+            "- Then, for each step: set the step in progress via update_plan_progress, execute the needed tools, and mark the step completed.\n"
+            "- After all steps are completed, call complete_plan and present a concise summary of outcomes.\n"
             "CREATION POLICY:\n"
             "- If asked to create a new project, entity, note, or chart, call createItem with type='<TYPE>' immediately (e.g., 'chart').\n"
             "- If also asked to fill values randomly or with placeholders, populate sensible defaults consistent with FIELD SCHEMA and, for projects/charts, add up to 2 checklist/metric entries using the relevant tools.\n"
@@ -319,6 +356,9 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             f"- globalDescription: {global_description!s}\n"
             f"- items:\n{items_summary}\n"
             f"- lastAction: {last_action}\n\n"
+            f"- planStatus: {plan_status}\n"
+            f"- currentStepIndex: {current_step_index}\n"
+            f"- planSteps: {[s.get('title', s) for s in plan_steps]}\n\n"
             "Resolution policy: If ANY prior message mentions values that conflict with the above,\n"
             "those earlier mentions are obsolete and MUST be ignored.\n"
             "When asked 'what is it now', ALWAYS read from this LATEST GROUND TRUTH.\n"
@@ -331,6 +371,60 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         *trimmed_messages,
         latest_state_system,
     ], config)
+
+    # Predictive plan state updates based on imminent tool calls (for UI rendering)
+    try:
+        tool_calls = getattr(response, "tool_calls", []) or []
+        predicted_plan_steps = plan_steps.copy()
+        predicted_current_index = current_step_index
+        predicted_plan_status = plan_status
+        for tc in tool_calls:
+            name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+            args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
+            if not isinstance(args, dict):
+                try:
+                    import json as _json
+                    args = _json.loads(args)  # sometimes args can be a json string
+                except Exception:
+                    args = {}
+            if name == "set_plan":
+                raw_steps = args.get("steps") or []
+                predicted_plan_steps = [{"title": s if isinstance(s, str) else str(s), "status": "pending"} for s in raw_steps]
+                if predicted_plan_steps:
+                    predicted_plan_steps[0]["status"] = "in_progress"
+                    predicted_current_index = 0
+                    predicted_plan_status = "in_progress"
+                else:
+                    predicted_current_index = -1
+                    predicted_plan_status = ""
+            elif name == "update_plan_progress":
+                idx = args.get("step_index")
+                status = args.get("status")
+                note = args.get("note")
+                if isinstance(idx, int) and 0 <= idx < len(predicted_plan_steps) and isinstance(status, str):
+                    if note:
+                        predicted_plan_steps[idx]["note"] = note
+                    predicted_plan_steps[idx]["status"] = status
+                    if status == "in_progress":
+                        predicted_current_index = idx
+                        predicted_plan_status = "in_progress"
+                    if status == "completed" and idx >= predicted_current_index:
+                        predicted_current_index = idx
+            elif name == "complete_plan":
+                for i in range(len(predicted_plan_steps)):
+                    if predicted_plan_steps[i].get("status") != "completed":
+                        predicted_plan_steps[i]["status"] = "completed"
+                predicted_plan_status = "completed"
+        # If we predicted changes, persist them before routing or ending
+        plan_updates = {}
+        if predicted_plan_steps != plan_steps:
+            plan_updates["planSteps"] = predicted_plan_steps
+        if predicted_current_index != current_step_index:
+            plan_updates["currentStepIndex"] = predicted_current_index
+        if predicted_plan_status != plan_status:
+            plan_updates["planStatus"] = predicted_plan_status
+    except Exception:
+        plan_updates = {}
 
     # only route to tool node if tool is not in the tools list
     if route_to_tool_node(response):
@@ -345,6 +439,10 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                 "globalDescription": state.get("globalDescription", ""),
                 "itemsCreated": state.get("itemsCreated", 0),
                 "lastAction": state.get("lastAction", ""),
+                "planSteps": state.get("planSteps", []),
+                "currentStepIndex": state.get("currentStepIndex", -1),
+                "planStatus": state.get("planStatus", ""),
+                **plan_updates,
                 # guidance for follow-up after tool execution
                 "__last_tool_guidance": "If a deletion tool reports success (deleted:ID), acknowledge deletion even if the item no longer exists afterwards."
             }
@@ -361,6 +459,10 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "globalDescription": state.get("globalDescription", ""),
             "itemsCreated": state.get("itemsCreated", 0),
             "lastAction": state.get("lastAction", ""),
+            "planSteps": state.get("planSteps", []),
+            "currentStepIndex": state.get("currentStepIndex", -1),
+            "planStatus": state.get("planStatus", ""),
+            **plan_updates,
             "__last_tool_guidance": None,
         }
     )

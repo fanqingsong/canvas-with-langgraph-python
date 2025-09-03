@@ -7,7 +7,7 @@ import type React from "react";
 import TextareaAutosize from "react-textarea-autosize";
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Plus, X } from "lucide-react"
+import { Plus, X, Check, Loader2 } from "lucide-react"
 import ShikiHighlighter from "react-shiki/web";
 import { motion, useScroll, useTransform, useMotionValueEvent } from "motion/react";
 import { EmptyState } from "@/components/empty-state";
@@ -90,12 +90,21 @@ interface Item {
   data: ItemData;
 }
 
+interface PlanStep {
+  title: string;
+  status: "pending" | "in_progress" | "completed" | "blocked";
+  note?: string;
+}
+
 interface AgentState {
   items: Item[];
   globalTitle: string;
   globalDescription: string;
   lastAction?: string;
   itemsCreated: number;
+  planSteps: PlanStep[];
+  currentStepIndex: number;
+  planStatus: string;
 }
 
 const initialState: AgentState = {
@@ -104,6 +113,9 @@ const initialState: AgentState = {
   globalDescription: "",
   lastAction: "",
   itemsCreated: 0,
+  planSteps: [],
+  currentStepIndex: -1,
+  planStatus: "",
 };
 
 // Shared pure update helpers (used by UI and Copilot actions)
@@ -278,13 +290,70 @@ export default function CopilotKitPage() {
     };
   };
 
-  useCoAgentStateRender<AgentState>({
+  /* useCoAgentStateRender<AgentState>({
     name: "sample_agent",
     render: ({ state }) => {
       return (
         <pre className="whitespace-pre-wrap text-xs text-violet-600 font-mono w-full overflow-hidden">
           {JSON.stringify(getStatePreviewJSON(state), null, 2)}
         </pre>
+      );
+    },
+  }); */
+
+  // Render plan steps (agentic generative UI)
+  useCoAgentStateRender<AgentState>({
+    name: "sample_agent",
+    render: ({ state }) => {
+      type PlanStep = { title?: string; status?: string; note?: string };
+      const steps = (state?.planSteps ?? []) as PlanStep[];
+      const currentIdx = typeof state?.currentStepIndex === "number" ? state.currentStepIndex : -1;
+      const planStatus = String(state?.planStatus ?? "");
+      if (!Array.isArray(steps) || steps.length === 0) return null;
+      const statusBadge = (
+        <span
+          className={cn(
+            "ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium border",
+            planStatus === "completed" && "text-green-700 border-green-300 bg-green-50",
+            planStatus === "in_progress" && "text-blue-700 border-blue-300 bg-blue-50",
+            planStatus !== "completed" && planStatus !== "in_progress" && "text-gray-600 border-gray-300 bg-gray-50",
+          )}
+        >
+          {planStatus || "pending"}
+        </span>
+      );
+      return (
+        <div className="my-2 w-full">
+          <div className="rounded-2xl border shadow-sm bg-card p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-sm font-semibold">Plan {statusBadge}</div>
+            </div>
+            <ol className="space-y-1">
+              {steps.map((s, i) => {
+                const status = (s?.status ?? "pending").toLowerCase();
+                const isActive = i === currentIdx && status === "in_progress";
+                const isDone = status === "completed";
+                return (
+                  <li key={`${s.title ?? "step"}-${i}`} className="flex items-start gap-2">
+                    <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center">
+                      {isDone ? (
+                        <Check className="h-4 w-4 text-green-600" />
+                      ) : isActive ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                      ) : (
+                        <span className="block h-2 w-2 rounded-full bg-gray-300" />
+                      )}
+                    </span>
+                    <div className="flex-1 text-sm">
+                      <div className={cn("leading-5", isDone && "text-green-700", isActive && "text-blue-700")}>{s.title ?? `Step ${i + 1}`}</div>
+                      {s.note && <div className="text-xs text-muted-foreground">{s.note}</div>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        </div>
       );
     },
   });
