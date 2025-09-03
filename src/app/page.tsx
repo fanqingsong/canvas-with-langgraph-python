@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+ 
 
 function NewItemMenu({ onSelect, align = "end", className }: { onSelect: (t: CardType) => void; align?: "start" | "end" | "center", className?: string }) {
   return (
@@ -257,6 +257,21 @@ export default function CopilotKitPage() {
   const lastCreationRef = useRef<{ type: CardType; name: string; id: string; ts: number } | null>(null);
   const lastChecklistCreationRef = useRef<Record<string, { text: string; id: string; ts: number }>>({});
   const lastMetricCreationRef = useRef<Record<string, { label: string; value: number | ""; id: string; ts: number }>>({});
+  // Strong idempotency during plan execution: allow only one creation per type while plan runs
+  const createdByTypeRef = useRef<Partial<Record<CardType, string>>>({});
+  const prevPlanStatusRef = useRef<string | null>(null);
+
+  // Reset per-plan idempotency map on plan start/end or when plan definition changes
+  useEffect(() => {
+    const status = String(state?.planStatus ?? "");
+    const prevStatus = prevPlanStatusRef.current;
+    const started = status === "in_progress" && prevStatus !== "in_progress";
+    const ended = prevStatus === "in_progress" && (status === "completed" || status === "failed" || status === "");
+    if (started || ended) {
+      createdByTypeRef.current = {};
+    }
+    prevPlanStatusRef.current = status;
+  }, [state?.planStatus]);
 
   useMotionValueEvent(scrollY, "change", (y) => {
     const disable = y >= headerScrollThreshold;
@@ -353,18 +368,7 @@ export default function CopilotKitPage() {
                     <div className="flex-1 text-sm">
                       <div className={cn("leading-5", isDone && "text-green-700", isActive && "text-blue-700", isFailed && "text-red-700")}>{s.title ?? `Step ${i + 1}`}</div>
                       {s.note ? (
-                        isActive ? (
-                          <div className="text-xs text-muted-foreground">{s.note}</div>
-                        ) : (
-                          <Accordion type="single" collapsible className="mt-0.5">
-                            <AccordionItem value={`note-${i}`}>
-                              <AccordionTrigger className="text-xs text-muted-foreground hover:no-underline">View details</AccordionTrigger>
-                              <AccordionContent>
-                                <div className="text-xs text-muted-foreground whitespace-pre-wrap">{s.note}</div>
-                              </AccordionContent>
-                            </AccordionItem>
-                          </Accordion>
-                        )
+                        null
                       ) : null}
                     </div>
                   </li>
@@ -1130,6 +1134,15 @@ export default function CopilotKitPage() {
     handler: ({ type, name }: { type: string; name?: string }) => {
       const t = (type as CardType);
       const normalized = (name ?? "").trim();
+      const planStatus = String(state?.planStatus ?? "");
+
+      // Per-plan strict idempotency: during an active plan, only one creation per type
+      if (planStatus === "in_progress") {
+        const existingCreatedId = createdByTypeRef.current[t];
+        if (existingCreatedId) {
+          return existingCreatedId;
+        }
+      }
       // 1) Name-based idempotency: if an item with same type+name exists, return it
       if (normalized) {
         const existing = (state?.items ?? initialState.items).find((it) => it.type === t && (it.name ?? "").trim() === normalized);
@@ -1140,11 +1153,14 @@ export default function CopilotKitPage() {
       // 2) Per-run throttle: avoid duplicate creations within a short window for identical type+name
       const now = Date.now();
       const recent = lastCreationRef.current;
-      if (recent && recent.type === t && (recent.name ?? "") === normalized && now - recent.ts < 1000) {
+      if (recent && recent.type === t && (recent.name ?? "") === normalized && now - recent.ts < 5000) {
         return recent.id;
       }
       const id = addItem(t, name);
       lastCreationRef.current = { type: t, name: normalized, id, ts: now };
+      if (planStatus === "in_progress") {
+        createdByTypeRef.current[t] = id;
+      }
       return id;
     },
   });
@@ -1251,72 +1267,7 @@ export default function CopilotKitPage() {
                   />
                 </motion.div>
               )}
-              {/* Persistent Plan Tracker (renders once, outside chat) */}
-              {Array.isArray(state?.planSteps) && state.planSteps.length > 0 && (
-                <div className="my-2 w-full">
-                  <div className="rounded-2xl border shadow-sm bg-card p-4">
-                    <div className="mb-2 flex items-center justify-between">
-                      {(() => {
-                        const planStatus = String(state?.planStatus ?? "");
-                        const statusBadge = (
-                          <span
-                            className={cn(
-                              "ml-2 rounded-full px-2 py-0.5 text-[10px] font-medium border",
-                              planStatus === "completed" && "text-green-700 border-green-300 bg-green-50",
-                              planStatus === "in_progress" && "text-blue-700 border-blue-300 bg-blue-50",
-                              planStatus === "failed" && "text-red-700 border-red-300 bg-red-50",
-                              planStatus !== "completed" && planStatus !== "in_progress" && planStatus !== "failed" && "text-gray-600 border-gray-300 bg-gray-50",
-                            )}
-                          >
-                            {planStatus || "pending"}
-                          </span>
-                        );
-                        return <div className="text-sm font-semibold">Plan {statusBadge}</div>;
-                      })()}
-                    </div>
-                    <ol className="space-y-1">
-                      {(state.planSteps as PlanStep[]).map((s, i) => {
-                        const status = String(s?.status ?? "pending").toLowerCase();
-                        const isActive = typeof state?.currentStepIndex === "number" && state.currentStepIndex === i && status === "in_progress";
-                        const isDone = status === "completed";
-                        const isFailed = status === "failed";
-                        return (
-                          <li key={`${s.title ?? "step"}-${i}`} className="flex items-start gap-2">
-                            <span className="mt-0.5 inline-flex h-4 w-4 items-center justify-center">
-                              {isDone ? (
-                                <Check className="h-4 w-4 text-green-600" />
-                              ) : isActive ? (
-                                <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                              ) : isFailed ? (
-                                <X className="h-4 w-4 text-red-600" />
-                              ) : (
-                                <span className="block h-2 w-2 rounded-full bg-gray-300" />
-                              )}
-                            </span>
-                            <div className="flex-1 text-sm">
-                              <div className={cn("leading-5", isDone && "text-green-700", isActive && "text-blue-700", isFailed && "text-red-700")}>{s.title ?? `Step ${i + 1}`}</div>
-                              {s.note ? (
-                                isActive ? (
-                                  <div className="text-xs text-muted-foreground">{s.note}</div>
-                                ) : (
-                                  <Accordion type="single" collapsible className="mt-0.5">
-                                    <AccordionItem value={`note-${i}`}>
-                                      <AccordionTrigger className="text-xs text-muted-foreground hover:no-underline">View details</AccordionTrigger>
-                                      <AccordionContent>
-                                        <div className="text-xs text-muted-foreground whitespace-pre-wrap">{s.note}</div>
-                                      </AccordionContent>
-                                    </AccordionItem>
-                                  </Accordion>
-                                )
-                              ) : null}
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  </div>
-                </div>
-              )}
+              
               {(state?.items ?? []).length === 0 ? (
                 <EmptyState className="flex-1">
                   <div className="mx-auto max-w-lg text-center">

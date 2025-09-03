@@ -301,6 +301,8 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "- When calling update_plan_progress (for 'in_progress', 'completed', or 'failed'), include a concise note describing the action or outcome. Keep notes short.\n"
             "- Proceed automatically between steps without waiting for user confirmation. Continue until all steps are completed or a failure occurs. If a step cannot be completed, mark it as 'failed' with a helpful note.\n"
             "- After all steps are completed, call complete_plan to mark the plan finished, then present a concise summary of outcomes.\n"
+            "- Do not call complete_plan unless all required deliverables exist (e.g., cards requested by the plan have been created). Verify existence from the latest ground truth before completing.\n"
+            "- While the plan is in progress, DO NOT send regular chat messages between steps. Render progress ONLY via the plan tracker. Send one final summary message AFTER the plan completes or fails.\n"
             "CREATION POLICY:\n"
             "- If asked to create a new project, entity, note, or chart, call createItem with type='<TYPE>' immediately (e.g., 'chart').\n"
             "- If also asked to fill values randomly or with placeholders, populate sensible defaults consistent with FIELD SCHEMA and, for projects/charts, add up to 2 checklist/metric entries using the relevant tools.\n"
@@ -417,12 +419,12 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                     if predicted_plan_steps[i].get("status") != "completed":
                         predicted_plan_steps[i]["status"] = "completed"
                 predicted_plan_status = "completed"
-        # Aggregate overall plan status if not explicitly set
+        # Aggregate overall plan status conservatively and manage progression
         if predicted_plan_steps:
             statuses = [str(s.get("status", "")) for s in predicted_plan_steps]
-            if all(st == "completed" for st in statuses if st):
-                predicted_plan_status = "completed"
-            elif any(st == "failed" for st in statuses):
+            # Do NOT auto-mark overall plan completed unless complete_plan is called.
+            # We still reflect failure if any step failed.
+            if any(st == "failed" for st in statuses):
                 predicted_plan_status = "failed"
             elif any(st == "in_progress" for st in statuses):
                 predicted_plan_status = "in_progress"
@@ -431,15 +433,22 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             else:
                 predicted_plan_status = predicted_plan_status or ""
 
-            # If plan is ongoing but no step is active, promote the next pending step to in_progress
-            if predicted_plan_status not in ("completed", "failed"):
-                active_idx = next((i for i, s in enumerate(predicted_plan_steps) if str(s.get("status", "")) == "in_progress"), -1)
-                if active_idx == -1:
-                    pending_idx = next((i for i, s in enumerate(predicted_plan_steps) if str(s.get("status", "")) == "pending"), -1)
-                    if pending_idx != -1:
-                        predicted_plan_steps[pending_idx]["status"] = "in_progress"
-                        predicted_current_index = pending_idx
-                        predicted_plan_status = "in_progress"
+            # Only promote a new step when the previously active step transitioned to completed
+            active_idx = next((i for i, s in enumerate(predicted_plan_steps) if str(s.get("status", "")) == "in_progress"), -1)
+            if active_idx == -1:
+                # find last completed and promote the next pending, else first pending
+                last_completed = -1
+                for i, s in enumerate(predicted_plan_steps):
+                    if str(s.get("status", "")) == "completed":
+                        last_completed = i
+                # Prefer the immediate next step after the last completed
+                promote_idx = next((i for i in range(last_completed + 1, len(predicted_plan_steps)) if str(predicted_plan_steps[i].get("status", "")) == "pending"), -1)
+                if promote_idx == -1:
+                    promote_idx = next((i for i, s in enumerate(predicted_plan_steps) if str(s.get("status", "")) == "pending"), -1)
+                if promote_idx != -1:
+                    predicted_plan_steps[promote_idx]["status"] = "in_progress"
+                    predicted_current_index = promote_idx
+                    predicted_plan_status = "in_progress"
         # If we predicted changes, persist them before routing or ending
         plan_updates = {}
         if predicted_plan_steps != plan_steps:
@@ -457,7 +466,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         return Command(
             goto="tool_node",
             update={
-                "messages": [*(state.get("messages", []) or []), response],
+                "messages": [response],
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
@@ -490,7 +499,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         return Command(
             goto="chat_node",
             update={
-                "messages": [*(state.get("messages", []) or []), response],
+                "messages": [response],
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
@@ -521,7 +530,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         return Command(
             goto="chat_node",
             update={
-                "messages": [*(state.get("messages", []) or []), response],
+                "messages": [response],
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
@@ -542,7 +551,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     return Command(
         goto=END,
         update={
-            "messages": [*(state.get("messages", []) or []), response],
+            "messages": [response],
             # persist shared state keys so UI edits survive across runs
             "items": state.get("items", []),
             "globalTitle": state.get("globalTitle", ""),
