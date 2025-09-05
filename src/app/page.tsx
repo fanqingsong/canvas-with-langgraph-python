@@ -1193,15 +1193,15 @@ export default function CopilotKitPage() {
     },
   });
 
-  const [cachedItems, setCachedItems] = useState<Item[]>((state?.items ?? initialState.items));
+  const lastNonEmptyRef = useRef<Item[]>(state?.items ?? initialState.items);
   useEffect(() => {
     const items = state?.items ?? [];
     if (items.length > 0) {
-      setCachedItems(items);
+      lastNonEmptyRef.current = items;
     }
   }, [state?.items]);
   const stateItems = state?.items ?? [];
-  const itemsToRender: Item[] = stateItems.length > 0 ? stateItems : cachedItems;
+  const itemsToRender: Item[] = stateItems.length > 0 ? stateItems : lastNonEmptyRef.current;
 
   const titleClasses = cn(
     /* base styles */
