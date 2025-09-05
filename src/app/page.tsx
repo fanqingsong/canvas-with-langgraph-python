@@ -1193,6 +1193,16 @@ export default function CopilotKitPage() {
     },
   });
 
+  const [cachedItems, setCachedItems] = useState<Item[]>((state?.items ?? initialState.items));
+  useEffect(() => {
+    const items = state?.items ?? [];
+    if (items.length > 0) {
+      setCachedItems(items);
+    }
+  }, [state?.items]);
+  const stateItems = state?.items ?? [];
+  const itemsToRender: Item[] = stateItems.length > 0 ? stateItems : cachedItems;
+
   const titleClasses = cn(
     /* base styles */
     "w-full outline-none rounded-md px-2 py-1",
@@ -1326,7 +1336,7 @@ export default function CopilotKitPage() {
           <div ref={scrollAreaRef} className="relative overflow-auto size-full px-4 sm:px-8 md:px-10 py-4">
             <div className={cn(
               "relative mx-auto max-w-7xl h-full min-h-8",
-              (showJsonView || (state?.items ?? []).length === 0) && "flex flex-col",
+              (showJsonView || itemsToRender.length === 0) && "flex flex-col",
             )}>
               {/* Global Title & Description (hidden in JSON view) */}
               {!showJsonView && (
@@ -1354,7 +1364,7 @@ export default function CopilotKitPage() {
                 </motion.div>
               )}
               
-              {(state?.items ?? []).length === 0 ? (
+              {itemsToRender.length === 0 ? (
                 <EmptyState className="flex-1">
                   <div className="mx-auto max-w-lg text-center">
                     <h2 className="text-lg font-semibold text-foreground">Nothing here yet</h2>
@@ -1376,7 +1386,7 @@ export default function CopilotKitPage() {
                     </div>
                   ) : (
                     <div className="grid gap-6 lg:grid-cols-2 pb-20">
-                      {state?.items.map((item) => (
+                      {itemsToRender.map((item) => (
                         <article key={item.id} className="relative rounded-2xl border p-5 shadow-sm transition-colors ease-out bg-card hover:border-accent/40 focus-within:border-accent/60">
                           <button
                             type="button"
@@ -1407,7 +1417,7 @@ export default function CopilotKitPage() {
               )}
             </div>
           </div>
-          {(state?.items ?? []).length > 0 ? (
+          {itemsToRender.length > 0 ? (
             <div className={cn(
               "absolute left-1/2 -translate-x-1/2 bottom-4",
               "inline-flex rounded-lg shadow-lg bg-card",
