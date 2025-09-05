@@ -296,8 +296,15 @@ export default function CopilotKitPage() {
     }
   }, [state?.items?.length, showJsonView]);
 
-  // Prevent sidebar tracker flicker by memoizing derived plan fields
-  const planStepsMemo = (state?.planSteps ?? initialState.planSteps);
+  // Prevent sidebar tracker flicker by caching last non-empty planSteps
+  const planStepsRef = useRef<PlanStep[]>(state?.planSteps ?? initialState.planSteps);
+  useEffect(() => {
+    const s = state?.planSteps ?? [];
+    if (Array.isArray(s) && s.length > 0) {
+      planStepsRef.current = s;
+    }
+  }, [state?.planSteps]);
+  const planStepsMemo = (state?.planSteps ?? []).length > 0 ? (state?.planSteps as PlanStep[]) : planStepsRef.current;
   const planStatusMemo = state?.planStatus ?? initialState.planStatus;
   const currentStepIndexMemo = typeof state?.currentStepIndex === "number" ? state.currentStepIndex : initialState.currentStepIndex;
 
@@ -1229,9 +1236,9 @@ export default function CopilotKitPage() {
             <AppChatHeader />
             {/* Sidebar Plan Tracker or Completed Summary */}
             {(() => {
-              const steps = (state?.planSteps ?? []) as PlanStep[];
+              const steps = planStepsMemo;
               const count = steps.length;
-              const status = String(state?.planStatus ?? "");
+              const status = String(planStatusMemo ?? "");
               if (!Array.isArray(steps) || count === 0 || status === "completed" || status === "failed" || status === "") return null;
               if (status === "completed") {
                 return (
@@ -1273,7 +1280,7 @@ export default function CopilotKitPage() {
                     <ol className="space-y-1">
                       {steps.map((s, i) => {
                         const st = String(s?.status ?? "pending").toLowerCase();
-                        const isActive = typeof state?.currentStepIndex === "number" && state.currentStepIndex === i && st === "in_progress";
+                        const isActive = typeof currentStepIndexMemo === "number" && currentStepIndexMemo === i && st === "in_progress";
                         const isDone = st === "completed";
                         const isFailed = st === "failed";
                         return (
