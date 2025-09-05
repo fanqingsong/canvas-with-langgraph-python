@@ -1376,7 +1376,7 @@ export default function CopilotKitPage() {
                     </div>
                   ) : (
                     <div className="grid gap-6 lg:grid-cols-2 pb-20">
-                      {(state?.items ?? initialState.items).map((item) => (
+                      {state?.items.map((item) => (
                         <article key={item.id} className="relative rounded-2xl border p-5 shadow-sm transition-colors ease-out bg-card hover:border-accent/40 focus-within:border-accent/60">
                           <button
                             type="button"
