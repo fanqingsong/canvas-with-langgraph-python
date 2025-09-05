@@ -468,7 +468,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         return Command(
             goto="tool_node",
             update={
-                "messages": [*(state.get("messages", []) or []), response],
+                "messages": [response],
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
@@ -513,7 +513,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         return Command(
             goto="chat_node",
             update={
-                "messages": [*(state.get("messages", []) or []), response] if has_frontend_tool_calls else (state.get("messages", []) or []),
+                "messages": [response] if has_frontend_tool_calls else ([]),
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
@@ -543,7 +543,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         return Command(
             goto="chat_node",
             update={
-                "messages": [*(state.get("messages", []) or []), response] if has_frontend_tool_calls else (state.get("messages", []) or []),
+                "messages": [response] if has_frontend_tool_calls else ([]),
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
@@ -563,7 +563,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
 
     # Only show chat messages when not actively in progress; always deliver frontend tool calls
     currently_in_progress = (plan_updates.get("planStatus", plan_status) == "in_progress")
-    final_messages = [*(state.get("messages", []) or []), response] if (has_frontend_tool_calls or not currently_in_progress) else (state.get("messages", []) or [])
+    final_messages = [response] if (has_frontend_tool_calls or not currently_in_progress) else ([])
     return Command(
         goto=END,
         update={
