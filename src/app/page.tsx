@@ -120,6 +120,12 @@ const initialState: AgentState = {
   planStatus: "",
 };
 
+function isNonEmptyAgentState(value: unknown): value is AgentState {
+  if (value == null || typeof value !== "object") return false;
+  const keys = Object.keys(value as Record<string, unknown>);
+  return keys.length > 0;
+}
+
 // Shared pure update helpers (used by UI and Copilot actions)
 function projectAddField4Item(data: ProjectData, text?: string): { next: ProjectData; createdId: string } {
   const existing = data.field4 ?? [];
@@ -246,6 +252,16 @@ export default function CopilotKitPage() {
     initialState,
   });
 
+  // Global cache for the last non-empty agent state
+  const cachedStateRef = useRef<AgentState>(state ?? initialState);
+  useEffect(() => {
+    if (isNonEmptyAgentState(state)) {
+      cachedStateRef.current = state as AgentState;
+    }
+  }, [state]);
+  // we use viewState to avoid transient flicker; TODO: troubleshoot and remove this workaround
+  const viewState: AgentState = isNonEmptyAgentState(state) ? (state as AgentState) : cachedStateRef.current;
+
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const [showJsonView, setShowJsonView] = useState<boolean>(false);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
@@ -264,7 +280,7 @@ export default function CopilotKitPage() {
 
   // Reset per-plan idempotency map on plan start/end or when plan definition changes
   useEffect(() => {
-    const status = String(state?.planStatus ?? "");
+    const status = String(viewState?.planStatus ?? "");
     const prevStatus = prevPlanStatusRef.current;
     const started = status === "in_progress" && prevStatus !== "in_progress";
     const ended = prevStatus === "in_progress" && (status === "completed" || status === "failed" || status === "");
@@ -290,23 +306,16 @@ export default function CopilotKitPage() {
 
   // Reset JSON view when there are no items
   useEffect(() => {
-    const itemsCount = (state?.items ?? []).length;
+    const itemsCount = (viewState?.items ?? []).length;
     if (itemsCount === 0 && showJsonView) {
       setShowJsonView(false);
     }
   }, [state?.items?.length, showJsonView]);
 
-  // Prevent sidebar tracker flicker by caching last non-empty planSteps
-  const planStepsRef = useRef<PlanStep[]>(state?.planSteps ?? initialState.planSteps);
-  useEffect(() => {
-    const s = state?.planSteps ?? [];
-    if (Array.isArray(s) && s.length > 0) {
-      planStepsRef.current = s;
-    }
-  }, [state?.planSteps]);
-  const planStepsMemo = (state?.planSteps ?? []).length > 0 ? (state?.planSteps as PlanStep[]) : planStepsRef.current;
-  const planStatusMemo = state?.planStatus ?? initialState.planStatus;
-  const currentStepIndexMemo = typeof state?.currentStepIndex === "number" ? state.currentStepIndex : initialState.currentStepIndex;
+  // Use cached viewState to derive plan-related fields
+  const planStepsMemo = (viewState?.planSteps ?? initialState.planSteps) as PlanStep[];
+  const planStatusMemo = viewState?.planStatus ?? initialState.planStatus;
+  const currentStepIndexMemo = typeof viewState?.currentStepIndex === "number" ? viewState.currentStepIndex : initialState.currentStepIndex;
 
   // One-time final summary renderer in chat when plan completes or fails
   useCoAgentStateRender<AgentState>({
@@ -374,7 +383,7 @@ export default function CopilotKitPage() {
     render: ({ state }) => {
       return (
         <pre className="whitespace-pre-wrap text-xs text-violet-600 font-mono w-full overflow-hidden">
-          {JSON.stringify(getStatePreviewJSON(state), null, 2)}
+          {JSON.stringify(getStatePreviewJSON(viewState), null, 2)}
         </pre>
       );
     },
@@ -385,9 +394,9 @@ export default function CopilotKitPage() {
   // Strengthen grounding: always prefer shared state over chat history
   useCopilotAdditionalInstructions({
     instructions: (() => {
-      const items = state?.items ?? initialState.items;
-      const gTitle = state?.globalTitle ?? "";
-      const gDesc = state?.globalDescription ?? "";
+      const items = viewState.items ?? initialState.items;
+      const gTitle = viewState.globalTitle ?? "";
+      const gDesc = viewState.globalDescription ?? "";
       const summary = items
         .slice(0, 5)
         .map((p: Item) => `id=${p.id} • name=${p.name} • type=${p.type}`)
@@ -444,7 +453,7 @@ export default function CopilotKitPage() {
       }
     },
     render: ({ event, resolve }) => {
-      const items = state?.items ?? initialState.items;
+      const items = viewState.items ?? initialState.items;
       if (!items.length) {
         return (
           <div className="rounded-md border bg-white p-4 text-sm shadow">
@@ -890,7 +899,7 @@ export default function CopilotKitPage() {
     handler: ({ itemId, text }: { itemId: string; text?: string }) => {
       const norm = (text ?? "").trim();
       // 1) If a checklist item with same text exists, return its id
-      const project = (state?.items ?? initialState.items).find((it) => it.id === itemId);
+      const project = (viewState.items ?? initialState.items).find((it) => it.id === itemId);
       if (project && project.type === "project") {
         const list = ((project.data as ProjectData).field4 ?? []);
         const dup = norm ? list.find((c) => (c.text ?? "").trim() === norm) : undefined;
@@ -1057,7 +1066,7 @@ export default function CopilotKitPage() {
     handler: ({ itemId, label, value }: { itemId: string; label?: string; value?: number }) => {
       const normLabel = (label ?? "").trim();
       // 1) If a metric with same label exists, return its id
-      const item = (state?.items ?? initialState.items).find((it) => it.id === itemId);
+      const item = (viewState.items ?? initialState.items).find((it) => it.id === itemId);
       if (item && item.type === "chart") {
         const list = ((item.data as ChartData).field1 ?? []);
         const dup = normLabel ? list.find((m) => (m.label ?? "").trim() === normLabel) : undefined;
@@ -1148,12 +1157,12 @@ export default function CopilotKitPage() {
     handler: ({ type, name }: { type: string; name?: string }) => {
       const t = (type as CardType);
       const normalized = (name ?? "").trim();
-      const planStatus = String(state?.planStatus ?? "");
+      const planStatus = String(viewState?.planStatus ?? "");
 
       // Per-plan strict idempotency: during an active plan, only one creation per type
       if (planStatus === "in_progress") {
         // If any item of this type already exists, return its id instead of creating another
-        const existingOfType = (state?.items ?? initialState.items).find((it) => it.type === t);
+        const existingOfType = (viewState.items ?? initialState.items).find((it) => it.type === t);
         if (existingOfType) {
           createdByTypeRef.current[t] = existingOfType.id;
           return existingOfType.id;
@@ -1165,7 +1174,7 @@ export default function CopilotKitPage() {
       }
       // 1) Name-based idempotency: if an item with same type+name exists, return it
       if (normalized) {
-        const existing = (state?.items ?? initialState.items).find((it) => it.type === t && (it.name ?? "").trim() === normalized);
+        const existing = (viewState.items ?? initialState.items).find((it) => it.type === t && (it.name ?? "").trim() === normalized);
         if (existing) {
           return existing.id;
         }
@@ -1194,21 +1203,11 @@ export default function CopilotKitPage() {
       { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
     handler: ({ itemId }: { itemId: string }) => {
-      const existed = (state?.items ?? initialState.items).some((p) => p.id === itemId);
+      const existed = (viewState.items ?? initialState.items).some((p) => p.id === itemId);
       deleteItem(itemId);
       return existed ? `deleted:${itemId}` : `not_found:${itemId}`;
     },
   });
-
-  const lastNonEmptyRef = useRef<Item[]>(state?.items ?? initialState.items);
-  useEffect(() => {
-    const items = state?.items ?? [];
-    if (items.length > 0) {
-      lastNonEmptyRef.current = items;
-    }
-  }, [state?.items]);
-  const stateItems = state?.items ?? [];
-  const itemsToRender: Item[] = stateItems.length > 0 ? stateItems : lastNonEmptyRef.current;
 
   const titleClasses = cn(
     /* base styles */
@@ -1343,7 +1342,7 @@ export default function CopilotKitPage() {
           <div ref={scrollAreaRef} className="relative overflow-auto size-full px-4 sm:px-8 md:px-10 py-4">
             <div className={cn(
               "relative mx-auto max-w-7xl h-full min-h-8",
-              (showJsonView || itemsToRender.length === 0) && "flex flex-col",
+              (showJsonView || (viewState.items ?? []).length === 0) && "flex flex-col",
             )}>
               {/* Global Title & Description (hidden in JSON view) */}
               {!showJsonView && (
@@ -1351,7 +1350,7 @@ export default function CopilotKitPage() {
                   <input
                     ref={titleInputRef}
                     disabled={headerDisabled}
-                    value={state?.globalTitle ?? initialState.globalTitle}
+                    value={viewState?.globalTitle ?? initialState.globalTitle}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       setState((prev) => ({ ...(prev ?? initialState), globalTitle: e.target.value }))
                     }
@@ -1361,7 +1360,7 @@ export default function CopilotKitPage() {
                   <input
                     ref={descTextareaRef}
                     disabled={headerDisabled}
-                    value={state?.globalDescription ?? initialState.globalDescription}
+                    value={viewState?.globalDescription ?? initialState.globalDescription}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       setState((prev) => ({ ...(prev ?? initialState), globalDescription: e.target.value }))
                     }
@@ -1371,7 +1370,7 @@ export default function CopilotKitPage() {
                 </motion.div>
               )}
               
-              {itemsToRender.length === 0 ? (
+              {(viewState.items ?? []).length === 0 ? (
                 <EmptyState className="flex-1">
                   <div className="mx-auto max-w-lg text-center">
                     <h2 className="text-lg font-semibold text-foreground">Nothing here yet</h2>
@@ -1387,13 +1386,13 @@ export default function CopilotKitPage() {
                     <div className="pb-16 size-full">
                       <div className="rounded-2xl border shadow-sm bg-card size-full overflow-auto max-md:text-sm">
                         <ShikiHighlighter language="json" theme="github-light">
-                          {JSON.stringify(getStatePreviewJSON(state), null, 2)}
+                          {JSON.stringify(getStatePreviewJSON(viewState), null, 2)}
                         </ShikiHighlighter>
                       </div>
                     </div>
                   ) : (
                     <div className="grid gap-6 lg:grid-cols-2 pb-20">
-                      {itemsToRender.map((item) => (
+                      {(viewState.items ?? []).map((item) => (
                         <article key={item.id} className="relative rounded-2xl border p-5 shadow-sm transition-colors ease-out bg-card hover:border-accent/40 focus-within:border-accent/60">
                           <button
                             type="button"
@@ -1424,7 +1423,7 @@ export default function CopilotKitPage() {
               )}
             </div>
           </div>
-          {itemsToRender.length > 0 ? (
+          {(viewState.items ?? []).length > 0 ? (
             <div className={cn(
               "absolute left-1/2 -translate-x-1/2 bottom-4",
               "inline-flex rounded-lg shadow-lg bg-card",
