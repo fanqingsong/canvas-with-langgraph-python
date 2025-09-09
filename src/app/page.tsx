@@ -1,253 +1,32 @@
 "use client";
 
 import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAdditionalInstructions, useLangGraphInterrupt } from "@copilotkit/react-core";
-import { CopilotKitCSSProperties, CopilotChat, CopilotPopup, useChatContext, HeaderProps } from "@copilotkit/react-ui";
+import { CopilotKitCSSProperties, CopilotChat, CopilotPopup } from "@copilotkit/react-ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
-import TextareaAutosize from "react-textarea-autosize";
+// extracted component uses its own internals
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Plus, X, Check, Loader2 } from "lucide-react"
+import AppChatHeader, { PopupHeader } from "@/components/canvas/AppChatHeader";
+import { X, Check, Loader2, Plus } from "lucide-react"
+import TextareaAutosize from "react-textarea-autosize";
+import { Progress } from "@/components/ui/progress";
 import ShikiHighlighter from "react-shiki/web";
 import { motion, useScroll, useTransform, useMotionValueEvent } from "motion/react";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Progress } from "@/components/ui/progress";
+import type { AgentState, PlanStep, Item, ItemData, ProjectData, EntityData, NoteData, ChartData, CardType } from "@/lib/canvas/types";
+import { initialState, isNonEmptyAgentState } from "@/lib/canvas/state";
+import { projectAddField4Item, projectSetField4ItemText, projectSetField4ItemDone, projectRemoveField4Item, chartAddField1Metric, chartSetField1Label, chartSetField1Value, chartRemoveField1Metric } from "@/lib/canvas/updates";
+import useMediaQuery from "@/hooks/use-media-query";
+import ItemHeader from "@/components/canvas/ItemHeader";
  
+import NewItemMenu from "@/components/canvas/NewItemMenu";
 
-function NewItemMenu({ onSelect, align = "end", className }: { onSelect: (t: CardType) => void; align?: "start" | "end" | "center", className?: string }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="default" className={cn("gap-2 text-base font-semibold bg-card rounded-lg",
-          // "hover:bg-accent/10 hover:border-accent hover:text-accent",
-          className)}>
-          <Plus className="size-5" />
-          New
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align={align} className="min-w-0 w-fit bg-background">
-        <DropdownMenuItem onClick={() => onSelect("project")}>Project</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onSelect("entity")}>Entity</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onSelect("note")}>Note</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onSelect("chart")}>Chart</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-interface ChecklistItem {
-  id: string;
-  text: string;
-  done: boolean;
-  proposed: boolean;
-}
-
-interface LinkItem {
-  title: string;
-  url: string;
-}
-
-type CardType = "project" | "entity" | "note" | "chart";
-
-interface ProjectData {
-  field1: string; // text
-  field2: string; // select
-  field3: string; // date
-  field4: ChecklistItem[]; // checklist
-  field4_id: number; // id counter
-}
-
-interface EntityData {
-  field1: string; // text
-  field2: string; // select
-  field3: string[]; // tags
-  field3_options: string[]; // options
-}
-
-interface NoteData {
-  field1?: string; // textarea
-}
-
-interface ChartMetric {
-  id: string;
-  label: string;
-  value: number | ""; // 0..100
-}
-
-interface ChartData {
-  field1: ChartMetric[]; // metrics
-  field1_id: number; // id counter
-}
-
-type ItemData = ProjectData | EntityData | NoteData | ChartData;
-
-interface Item {
-  id: string;
-  type: CardType;
-  name: string; // editable title
-  subtitle: string; // subtitle shown under the title
-  data: ItemData;
-}
-
-interface PlanStep {
-  title: string;
-  status: "pending" | "in_progress" | "completed" | "blocked" | "failed";
-  note?: string;
-}
-
-interface AgentState {
-  items: Item[];
-  globalTitle: string;
-  globalDescription: string;
-  lastAction?: string;
-  itemsCreated: number;
-  planSteps: PlanStep[];
-  currentStepIndex: number;
-  planStatus: string;
-}
-
-const initialState: AgentState = {
-  items: [],
-  globalTitle: "",
-  globalDescription: "",
-  lastAction: "",
-  itemsCreated: 0,
-  planSteps: [],
-  currentStepIndex: -1,
-  planStatus: "",
-};
-
-function isNonEmptyAgentState(value: unknown): value is AgentState {
-  if (value == null || typeof value !== "object") return false;
-  const keys = Object.keys(value as Record<string, unknown>);
-  return keys.length > 0;
-}
-
-// Shared pure update helpers (used by UI and Copilot actions)
-function projectAddField4Item(data: ProjectData, text?: string): { next: ProjectData; createdId: string } {
-  const existing = data.field4 ?? [];
-  const nextCount = (data.field4_id ?? 0) + 1;
-  const id = String(nextCount).padStart(3, "0");
-  const next = [...existing, { id, text: text ?? "", done: false, proposed: false }];
-  return { next: { ...data, field4: next, field4_id: nextCount }, createdId: id };
-}
-
-function projectSetField4ItemText(data: ProjectData, checklistItemId: string, text: string): ProjectData {
-  const next = (data.field4 ?? []).map((item) => (item.id === checklistItemId ? { ...item, text } : item));
-  return { ...data, field4: next } as ProjectData;
-}
-
-function projectSetField4ItemDone(data: ProjectData, checklistItemId: string, done: boolean): ProjectData {
-  const next = (data.field4 ?? []).map((item) => (item.id === checklistItemId ? { ...item, done } : item));
-  return { ...data, field4: next } as ProjectData;
-}
-
-function projectRemoveField4Item(data: ProjectData, checklistItemId: string): ProjectData {
-  const next = (data.field4 ?? []).filter((item) => item.id !== checklistItemId);
-  return { ...data, field4: next } as ProjectData;
-}
-
-function chartAddField1Metric(data: ChartData, label?: string, value?: number | ""): { next: ChartData; createdId: string } {
-  const existing = data.field1 ?? [];
-  const nextCount = (data.field1_id ?? 0) + 1;
-  const id = String(nextCount).padStart(3, "0");
-  const safe: number | "" = typeof value === "number" && Number.isFinite(value)
-    ? Math.max(0, Math.min(100, value))
-    : value === "" ? "" : 0;
-  const next = [...existing, { id, label: label ?? "", value: safe }];
-  return { next: { ...data, field1: next, field1_id: nextCount }, createdId: id };
-}
-
-function chartSetField1Label(data: ChartData, index: number, label: string): ChartData {
-  const next = [...(data.field1 ?? [])];
-  if (index >= 0 && index < next.length) {
-    next[index] = { ...next[index], label };
-    return { ...data, field1: next } as ChartData;
-  }
-  return data;
-}
-
-function chartSetField1Value(data: ChartData, index: number, value: number | ""): ChartData {
-  const next = [...(data.field1 ?? [])];
-  if (index >= 0 && index < next.length) {
-    if (value === "") {
-      next[index] = { ...next[index], value: "" };
-    } else {
-      const clamped = Math.max(0, Math.min(100, value));
-      next[index] = { ...next[index], value: clamped };
-    }
-    return { ...data, field1: next } as ChartData;
-  }
-  return data;
-}
-
-function chartRemoveField1Metric(data: ChartData, index: number): ChartData {
-  const next = [...(data.field1 ?? [])];
-  if (index >= 0 && index < next.length) {
-    next.splice(index, 1);
-    return { ...data, field1: next } as ChartData;
-  }
-  return data;
-}
-
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia === "undefined") return;
-    const mediaQueryList = window.matchMedia(query);
-    const updateMatch = () => setMatches(mediaQueryList.matches);
-    updateMatch();
-    mediaQueryList.addEventListener("change", updateMatch);
-    return () => mediaQueryList.removeEventListener("change", updateMatch);
-  }, [query]);
-
-  return matches;
-}
-
-function AppChatHeader({ onClose }: { onClose?: () => void }) {
-  return (
-    <div className="p-4 border-b border-sidebar-border">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Avatar className="size-8">
-            <AvatarFallback className="bg-accent/10 text-sidebar-primary-foreground">
-              <span>🪁</span>
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <h3 className="font-bold text-sidebar-foreground">CopilotKit Canvas</h3>
-            <div className="flex items-center gap-x-1.5 text-xs text-muted-foreground">
-              <div className="inline-block size-1.5 rounded-full bg-green-500" />
-              <div>Online <span className="opacity-50 text-[90%] select-none">•</span> Ready to help</div>
-            </div>
-          </div>
-        </div>
-        {typeof onClose === "function" && (
-          <button
-            type="button"
-            aria-label="Close"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border text-muted-foreground hover:text-foreground hover:bg-accent/10"
-            onClick={() => onClose?.()}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PopupHeader({}: HeaderProps) {
-  const { setOpen } = useChatContext();
-  return <AppChatHeader onClose={() => setOpen(false)} />;
-}
+// AppChatHeader and PopupHeader extracted
 
 export default function CopilotKitPage() {
-  const { state, setState, running, run } = useCoAgent<AgentState>({
+  const { state, setState } = useCoAgent<AgentState>({
     name: "sample_agent",
     initialState,
   });
@@ -288,7 +67,7 @@ export default function CopilotKitPage() {
       createdByTypeRef.current = {};
     }
     prevPlanStatusRef.current = status;
-  }, [state?.planStatus]);
+  }, [viewState?.planStatus]);
 
   useMotionValueEvent(scrollY, "change", (y) => {
     const disable = y >= headerScrollThreshold;
@@ -300,9 +79,8 @@ export default function CopilotKitPage() {
   });
 
   useEffect(() => {
-    // eslint-disable-next-line no-console
     console.log("[CoAgent state updated]", state);
-  }, [JSON.stringify(state)]);
+  }, [state]);
 
   // Reset JSON view when there are no items
   useEffect(() => {
@@ -310,7 +88,7 @@ export default function CopilotKitPage() {
     if (itemsCount === 0 && showJsonView) {
       setShowJsonView(false);
     }
-  }, [state?.items?.length, showJsonView]);
+  }, [viewState?.items, showJsonView]);
 
   // Use cached viewState to derive plan-related fields
   const planStepsMemo = (viewState?.planSteps ?? initialState.planSteps) as PlanStep[];
@@ -370,7 +148,7 @@ export default function CopilotKitPage() {
   // Modern JS does respect insertion order of JS objects, so we can show the keys in a sensible order in the JSON preview
   const getStatePreviewJSON = (s: AgentState | undefined): Record<string, unknown> => {
     const snapshot = (s ?? initialState) as AgentState;
-    const { globalTitle, globalDescription, items, ...rest } = snapshot;
+    const { globalTitle, globalDescription, items } = snapshot;
     return {
       globalTitle: globalTitle ?? initialState.globalTitle,
       globalDescription: globalDescription ?? initialState.globalDescription,
@@ -471,7 +249,7 @@ export default function CopilotKitPage() {
       return (
         <div className="rounded-md border bg-white p-4 text-sm shadow">
           <p className="mb-2 font-medium">Select an item</p>
-          <p className="mb-3 text-xs text-gray-600">{(event?.value as any)?.content ?? "Which item should I use?"}</p>
+          <p className="mb-3 text-xs text-gray-600">{(event?.value as { content?: string })?.content ?? "Which item should I use?"}</p>
           <select
             className="w-full rounded border px-2 py-1"
             defaultValue={selectedId}
@@ -524,7 +302,7 @@ export default function CopilotKitPage() {
       return (
         <div className="rounded-md border bg-white p-4 text-sm shadow">
           <p className="mb-2 font-medium">Select a card type</p>
-          <p className="mb-3 text-xs text-gray-600">{(event?.value as any)?.content ?? "Which type of card should I create?"}</p>
+          <p className="mb-3 text-xs text-gray-600">{(event?.value as { content?: string })?.content ?? "Which type of card should I create?"}</p>
           <select
             className="w-full rounded border px-2 py-1"
             defaultValue=""
@@ -589,7 +367,7 @@ export default function CopilotKitPage() {
 
   const toggleTag = useCallback((itemId: string, tag: string) => {
     updateItemData(itemId, (prev) => {
-      const anyPrev = prev as any;
+      const anyPrev = prev as { field3?: string[] };
       if (Array.isArray(anyPrev.field3)) {
         const selected = new Set<string>(anyPrev.field3 ?? []);
         if (selected.has(tag)) selected.delete(tag); else selected.add(tag);
@@ -795,7 +573,7 @@ export default function CopilotKitPage() {
     handler: ({ value, itemId }: { value: string; itemId: string }) => {
       const safeValue = String((value as unknown as string) ?? "");
       updateItemData(itemId, (prev) => {
-        const anyPrev = prev as any;
+        const anyPrev = prev as { field1?: string };
         if (typeof anyPrev.field1 === "string") {
           return { ...anyPrev, field1: safeValue } as ItemData;
         }
@@ -816,7 +594,7 @@ export default function CopilotKitPage() {
     handler: ({ value, itemId }: { value: string; itemId: string }) => {
       const safeValue = String((value as unknown as string) ?? "");
       updateItemData(itemId, (prev) => {
-        const anyPrev = prev as any;
+        const anyPrev = prev as { field2?: string };
         if (typeof anyPrev.field2 === "string") {
           return { ...anyPrev, field2: safeValue } as ItemData;
         }
@@ -835,7 +613,8 @@ export default function CopilotKitPage() {
     ],
     handler: (args: { date?: string; itemId: string } & Record<string, unknown>) => {
       const itemId = String(args.itemId);
-      const rawInput = (args as any).date ?? (args as any).value ?? (args as any).val ?? (args as any).text;
+      const dictArgs = args as Record<string, unknown>;
+      const rawInput = (dictArgs["date"]) ?? (dictArgs["value"]) ?? (dictArgs["val"]) ?? (dictArgs["text"]);
       const normalizeDate = (input: unknown): string | null => {
         if (input == null) return null;
         if (input instanceof Date && !isNaN(input.getTime())) {
@@ -859,7 +638,7 @@ export default function CopilotKitPage() {
       const normalized = normalizeDate(rawInput);
       if (!normalized) return;
       updateItemData(itemId, (prev) => {
-        const anyPrev = prev as any;
+        const anyPrev = prev as { field3?: string };
         if (typeof anyPrev.field3 === "string") {
           return { ...anyPrev, field3: normalized } as ItemData;
         }
@@ -878,7 +657,7 @@ export default function CopilotKitPage() {
     ],
     handler: ({ itemId }: { itemId: string }) => {
       updateItemData(itemId, (prev) => {
-        const anyPrev = prev as any;
+        const anyPrev = prev as { field3?: string };
         if (typeof anyPrev.field3 === "string") {
           return { ...anyPrev, field3: "" } as ItemData;
         }
@@ -933,9 +712,9 @@ export default function CopilotKitPage() {
       { name: "text", type: "string", required: false, description: "New text (optional)." },
       { name: "done", type: "boolean", required: false, description: "Done status (optional)." },
     ],
-    handler: (args: any) => {
+    handler: (args) => {
       const itemId = String(args.itemId ?? "");
-      let target = args.checklistItemId ?? args.id ?? args.index;
+      const target = args.checklistItemId ?? args.itemId;
       let targetId = target != null ? String(target) : "";
       const maybeDone = args.done;
       const text: string | undefined = args.text != null ? String(args.text) : undefined;
@@ -991,7 +770,7 @@ export default function CopilotKitPage() {
     ],
     handler: ({ value, itemId }: { value: string; itemId: string }) => {
       updateItemData(itemId, (prev) => {
-        const anyPrev = prev as any;
+        const anyPrev = prev;
         if (typeof anyPrev.field1 === "string") {
           return { ...anyPrev, field1: value } as ItemData;
         }
@@ -1010,7 +789,7 @@ export default function CopilotKitPage() {
     ],
     handler: ({ value, itemId }: { value: string; itemId: string }) => {
       updateItemData(itemId, (prev) => {
-        const anyPrev = prev as any;
+        const anyPrev = prev as { field2?: string };
         if (typeof anyPrev.field2 === "string") {
           return { ...anyPrev, field2: value } as ItemData;
         }
@@ -1409,7 +1188,6 @@ export default function CopilotKitPage() {
                             description={""}
                             onNameChange={(v) => updateItem(item.id, { name: v })}
                             onSubtitleChange={(v) => updateItem(item.id, { subtitle: v })}
-                            onDescriptionChange={(v) => updateItemData(item.id, (prev) => prev)}
                           />
 
                           <div className="mt-6">
@@ -1490,43 +1268,9 @@ export default function CopilotKitPage() {
   );
 }
 
-function ItemHeader(props: {
-  id: string;
-  name: string;
-  subtitle: string;
-  description: string;
-  onNameChange: (value: string) => void;
-  onSubtitleChange: (value: string) => void;
-  onDescriptionChange: (value: string) => void;
-  onNameCommit?: (value: string) => void;
-  onDescriptionCommit?: (value: string) => void;
-}) {
-  const { id, name, subtitle, description, onNameChange, onSubtitleChange, onDescriptionChange, onNameCommit, onDescriptionCommit } = props;
-  return (
-    <div className="mb-4">
-      <div className="mb-2">
-        <span className="rounded-sm border border-dashed border-foreground/25 px-1 py-0.5 text-xs font-mono text-muted-foreground/50">
-          <span className="font-medium">ID:</span><span className="-tracking-widest"> </span><span className="tracking-wide">{id}</span>
-        </span>
-      </div>
-      <input
-        value={name}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => onNameChange(e.target.value)}
-        onBlur={(e: React.FocusEvent<HTMLInputElement>) => onNameCommit?.(e.target.value)}
-        placeholder="Item title"
-        className="w-full appearance-none text-2xl font-semibold outline-none placeholder:text-gray-400 transition-colors focus:text-accent focus:placeholder:text-accent/65"
-      />
-      <TextareaAutosize
-        value={subtitle}
-        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onSubtitleChange(e.target.value)}
-        placeholder="Optional subtitle or short description"
-        className="mt-2 w-full bg-transparent text-sm leading-6 resize-none outline-none placeholder:text-gray-400 transition-colors focus:text-accent focus:placeholder:text-accent/65"
-        minRows={1}
-      />
-    </div>
-  );
-}
+// ItemHeader extracted to components
 
+/* CardRenderer (inlined) start */
 function CardRenderer(props: {
   item: Item;
   onUpdateData: (updater: (prev: ItemData) => ItemData) => void;
@@ -1758,117 +1502,6 @@ function CardRenderer(props: {
     </div>
   );
 }
+/* CardRenderer (inlined) end */
 
-function Select<T extends string>(props: {
-  label: string;
-  value: T;
-  options: readonly T[] | string[];
-  onChange: (value: T) => void;
-}) {
-  const { label, value, options, onChange } = props;
-  return (
-    <div className="flex h-9 items-center gap-1 rounded-md border px-2">
-      <span className="text-[11px] text-gray-500">{label}</span>
-      <select
-        value={value}
-        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => onChange(e.target.value as T)}
-        className="h-7 appearance-none bg-transparent pl-1 pr-4 text-sm outline-none"
-      >
-        {options.map((opt) => (
-          <option key={String(opt)} value={String(opt)}>
-            {String(opt)}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function TagEditor(props: { tags: string[]; onAdd: (tag: string) => void; onRemove: (tag: string) => void }) {
-  const { tags, onAdd, onRemove } = props;
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      onAdd((e.target as HTMLInputElement).value);
-      (e.target as HTMLInputElement).value = "";
-    }
-  };
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-md border p-2">
-      {tags.map((t: string) => (
-        <span key={t} className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs">
-          {t}
-          <button className="text-gray-500" onClick={() => onRemove(t)} aria-label={`Remove ${t}`}>
-            ×
-          </button>
-        </span>
-      ))}
-      <input
-        onKeyDown={handleKeyDown}
-        placeholder="Add tag and press Enter"
-        className="min-w-32 flex-1 rounded-md px-1 text-sm outline-none"
-      />
-    </div>
-  );
-}
-
-function AddChecklistInput(props: { onAdd: (text: string) => void }) {
-  const { onAdd } = props;
-  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      onAdd((e.target as HTMLInputElement).value);
-      (e.target as HTMLInputElement).value = "";
-    }
-  };
-  return (
-    <input
-      onKeyDown={onKeyDown}
-      placeholder="+ Add item and press Enter"
-      className="w-full rounded-md border px-2 py-1 text-sm outline-none"
-    />
-  );
-}
-
-function LinkList(props: {
-  links: LinkItem[];
-  onChange: (next: LinkItem[]) => void;
-}) {
-  const { links, onChange } = props;
-
-  const add = () => {
-    const title = window.prompt("Link title");
-    const url = window.prompt("Link URL (https://…)");
-    if (!title || !url) return;
-    try {
-      // basic validation
-      // eslint-disable-next-line no-new
-      new URL(url);
-      onChange([...links, { title, url }]);
-    } catch {
-      // ignore invalid URL
-    }
-  };
-
-  const removeAt = (idx: number) => {
-    const next = links.slice(0, idx).concat(links.slice(idx + 1));
-    onChange(next);
-  };
-
-  return (
-    <div className="space-y-2">
-      {links.length === 0 && <p className="text-xs text-gray-500">No links yet.</p>}
-      {links.map((l, i) => (
-        <div key={`${l.title}-${i}`} className="flex items-center justify-between gap-2 rounded-md border p-2">
-          <a href={l.url} target="_blank" rel="noreferrer" className="truncate text-sm text-blue-600 underline">
-            {l.title}
-          </a>
-          <button onClick={() => removeAt(i)} className="rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50">
-            Remove
-          </button>
-        </div>
-      ))}
-      <button onClick={add} className="rounded-md border px-3 py-1 text-xs text-gray-700 hover:bg-gray-50">
-        + Add link
-      </button>
-    </div>
-  );
-}
+// auxiliary components removed during refactor
