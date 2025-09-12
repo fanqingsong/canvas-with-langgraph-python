@@ -6,7 +6,7 @@ It defines the workflow graph, state, tools, nodes and edges.
 from typing import Any, List, Optional, Dict
 from typing_extensions import Literal
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage
+from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain.tools import tool
 from langgraph.graph import StateGraph, END
@@ -345,11 +345,41 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     except Exception:
         pass
 
-    # 4.1 Trim long histories to reduce stale context influence and suppress typing flicker
+    # 4.1 If the latest message contains unresolved FRONTEND tool calls, do not call the LLM yet.
+    #     End the turn and wait for the client to execute tools and append ToolMessage responses.
     full_messages = state.get("messages", []) or []
+    try:
+        if full_messages:
+            last_msg = full_messages[-1]
+            if isinstance(last_msg, AIMessage):
+                pending_frontend_call = False
+                for tc in getattr(last_msg, "tool_calls", []) or []:
+                    name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+                    if name and name not in backend_tool_names:
+                        pending_frontend_call = True
+                        break
+                if pending_frontend_call:
+                    return Command(
+                        goto=END,
+                        update={
+                            # no changes; just wait for the client to respond with ToolMessage(s)
+                            "items": state.get("items", []),
+                            "globalTitle": state.get("globalTitle", ""),
+                            "globalDescription": state.get("globalDescription", ""),
+                            "itemsCreated": state.get("itemsCreated", 0),
+                            "lastAction": state.get("lastAction", ""),
+                            "planSteps": state.get("planSteps", []),
+                            "currentStepIndex": state.get("currentStepIndex", -1),
+                            "planStatus": state.get("planStatus", ""),
+                        },
+                    )
+    except Exception:
+        pass
+
+    # 4.2 Trim long histories to reduce stale context influence and suppress typing flicker
     trimmed_messages = full_messages[-12:]
 
-    # 4.2 Append a final, authoritative state snapshot after chat history
+    # 4.3 Append a final, authoritative state snapshot after chat history
     #
     # Ensure the latest shared state takes priority over chat history and
     # stale tool results. This enforces state-first grounding, reduces drift, and makes
@@ -508,12 +538,35 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             has_frontend_tool_calls = True
             break
 
+    # If the model produced FRONTEND tool calls, deliver them to the client and stop the turn.
+    # The client will execute and post ToolMessage(s), after which the next run can resume.
+    if has_frontend_tool_calls:
+        return Command(
+            goto=END,
+            update={
+                "messages": [response],
+                "items": state.get("items", []),
+                "globalTitle": state.get("globalTitle", ""),
+                "globalDescription": state.get("globalDescription", ""),
+                "itemsCreated": state.get("itemsCreated", 0),
+                "lastAction": state.get("lastAction", ""),
+                "planSteps": state.get("planSteps", []),
+                "currentStepIndex": state.get("currentStepIndex", -1),
+                "planStatus": state.get("planStatus", ""),
+                **plan_updates,
+                "__last_tool_guidance": (
+                    "Frontend tool calls issued. Waiting for client tool results before continuing."
+                ),
+            },
+        )
+
     if has_remaining and effective_plan_status != "completed":
         # Auto-continue; include response only if it carries frontend tool calls
         return Command(
             goto="chat_node",
             update={
-                "messages": [response] if has_frontend_tool_calls else ([]),
+                # At this point there should be no frontend tool calls; ensure we don't pass any unresolved ones back to the model
+                "messages": ([]),
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "globalTitle": state.get("globalTitle", ""),
