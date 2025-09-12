@@ -3,6 +3,9 @@ This is the main entry point for the agent.
 It defines the workflow graph, state, tools, nodes and edges.
 """
 
+# Apply patch for CopilotKit import issue before any other imports
+import patch_copilotkit
+
 from typing import Any, List, Optional, Dict
 from typing_extensions import Literal
 from langchain_openai import ChatOpenAI
