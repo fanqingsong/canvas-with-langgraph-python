@@ -4,8 +4,31 @@ It defines the workflow graph, state, tools, nodes and edges.
 """
 
 # Apply patch for CopilotKit import issue before any other imports
-import patch_copilotkit
+# This fixes the incorrect import path in copilotkit.langgraph_agent (bug in v0.1.63)
+import sys
 
+# Only apply the patch if the module doesn't already exist
+if 'langgraph.graph.graph' not in sys.modules:
+    # Create a mock module for the incorrect import path that CopilotKit expects
+    class _MockModule:
+        pass
+
+    # Import the necessary modules first
+    import langgraph
+    import langgraph.graph
+    import langgraph.graph.state
+
+    # Import CompiledStateGraph from the correct location
+    from langgraph.graph.state import CompiledStateGraph
+
+    # Create the fake module path that CopilotKit incorrectly expects
+    _mock_graph_module = _MockModule()
+    _mock_graph_module.CompiledGraph = CompiledStateGraph
+
+    # Add it to sys.modules so CopilotKit's incorrect import will work
+    sys.modules['langgraph.graph.graph'] = _mock_graph_module
+
+# Now we can safely import everything else
 from typing import Any, List, Optional, Dict
 from typing_extensions import Literal
 from langchain_openai import ChatOpenAI
