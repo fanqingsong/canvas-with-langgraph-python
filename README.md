@@ -1,5 +1,11 @@
 # CopilotKit <> LangGraph AG-UI Canvas Starter
 
+
+
+https://github.com/user-attachments/assets/2a4ec718-b83b-4968-9cbe-7c1fe082e958
+
+
+
 This is a starter template for building AI-powered canvas applications using [LangGraph](https://www.langchain.com/langgraph) and [CopilotKit](https://copilotkit.ai). It provides a modern Next.js application with an integrated LangGraph agent that manages a visual canvas of interactive cards with real-time AI synchronization.
 
 ## Key Features
