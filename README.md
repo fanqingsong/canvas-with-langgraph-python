@@ -138,10 +138,13 @@ graph TB
     style UI fill:#e1f5fe
     style Agent fill:#fff3e0
     style Runtime fill:#f3e5f5
+    
+    click UI "https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/src/app/page.tsx"
+    click Agent "https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/agent/agent.py"
 ```
 
 ### Frontend (Next.js + CopilotKit)
-The main UI component is in `src/app/page.tsx`. It includes:
+The main UI component is in [`src/app/page.tsx`](https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/src/app/page.tsx). It includes:
 - **Canvas Management**: Visual grid of cards with create, read, update, delete operations
 - **State Synchronization**: Uses `useCoAgent` hook for real-time state sync with the agent
 - **Frontend Actions**: Exposed as tools to the AI agent via `useCopilotAction`
@@ -149,7 +152,7 @@ The main UI component is in `src/app/page.tsx`. It includes:
 - **HITL Interrupts**: Uses `useLangGraphInterrupt` for disambiguation prompts
 
 ### Backend (LangGraph Agent)
-The agent logic is in `agent/agent.py`. It features:
+The agent logic is in [`agent/agent.py`](https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/agent/agent.py). It features:
 - **State Management**: Extends `CopilotKitState` with canvas-specific fields
 - **Tool Integration**: Backend tools for weather, planning, and frontend tools for canvas operations
 - **Strict Grounding**: Enforces data consistency by always using shared state as truth
@@ -190,19 +193,19 @@ sequenceDiagram
 ## Customization Guide
 
 ### Adding New Card Types
-1. Define the data schema in `src/lib/canvas/types.ts`
+1. Define the data schema in [`src/lib/canvas/types.ts`](https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/src/lib/canvas/types.ts)
 2. Add the card type to the `CardType` union
-3. Create rendering logic in `src/components/canvas/CardRenderer.tsx`
-4. Update the agent's field schema in `agent/agent.py`
-5. Add corresponding frontend actions in `src/app/page.tsx`
+3. Create rendering logic in [`src/components/canvas/CardRenderer.tsx`](https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/src/components/canvas/CardRenderer.tsx)
+4. Update the agent's field schema in [`agent/agent.py`](https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/agent/agent.py)
+5. Add corresponding frontend actions in [`src/app/page.tsx`](https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/src/app/page.tsx)
 
 ### Modifying Existing Cards
 - Field definitions are in the agent's system message
-- UI components are in `CardRenderer.tsx`
+- UI components are in [`CardRenderer.tsx`](https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/src/components/canvas/CardRenderer.tsx)
 - Frontend actions follow the pattern: `set[Type]Field[Number]`
 
 ### Styling
-- Global styles: `src/app/globals.css`
+- Global styles: [`src/app/globals.css`](https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/src/app/globals.css)
 - Component styles use Tailwind CSS with shadcn/ui components
 - Theme colors can be modified via CSS custom properties
 
@@ -241,7 +244,7 @@ If the canvas and AI seem out of sync:
 3. Verify the agent is using the latest shared state (not cached values)
 
 ### CopilotKit Import Issue
-The agent includes a patch for a known CopilotKit v0.1.63 import issue. If you upgrade CopilotKit and see import errors, you may need to adjust or remove the patch at the top of `agent/agent.py`.
+The agent includes a patch for a known CopilotKit v0.1.63 import issue. If you upgrade CopilotKit and see import errors, you may need to adjust or remove the patch at the top of [`agent/agent.py`](https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/agent/agent.py).
 
 ### Python Dependencies
 If you encounter Python import errors:
