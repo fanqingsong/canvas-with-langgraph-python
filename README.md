@@ -106,6 +106,40 @@ The following scripts can also be run using your preferred package manager:
 
 ## Architecture Overview
 
+```mermaid
+graph TB
+    subgraph "Frontend (Next.js)"
+        UI[Canvas UI<br/>page.tsx]
+        Actions[Frontend Actions<br/>useCopilotAction]
+        State[State Management<br/>useCoAgent]
+        Chat[CopilotChat]
+    end
+    
+    subgraph "Backend (Python)"
+        Agent[LangGraph Agent<br/>agent.py]
+        Tools[Backend Tools<br/>- setPlan<br/>- updatePlanProgress<br/>- completePlan]
+        AgentState[AgentState<br/>CopilotKitState]
+        Model[LLM<br/>GPT-4o]
+    end
+    
+    subgraph "Communication"
+        Runtime[CopilotKit Runtime<br/>:8123]
+    end
+    
+    UI <--> State
+    State <--> Runtime
+    Chat <--> Runtime
+    Actions --> Runtime
+    Runtime <--> Agent
+    Agent --> Tools
+    Agent --> AgentState
+    Agent --> Model
+    
+    style UI fill:#e1f5fe
+    style Agent fill:#fff3e0
+    style Runtime fill:#f3e5f5
+```
+
 ### Frontend (Next.js + CopilotKit)
 The main UI component is in `src/app/page.tsx`. It includes:
 - **Canvas Management**: Visual grid of cards with create, read, update, delete operations
@@ -128,6 +162,30 @@ Each card type has specific fields defined in the agent:
 - **Entity**: field1 (text), field2 (select), field3 (tags), field3_options (available tags)
 - **Note**: field1 (textarea content)
 - **Chart**: field1 (array of metrics with label and value 0-100)
+
+### Data Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as Canvas UI
+    participant CK as CopilotKit
+    participant Agent as LangGraph Agent
+    participant Tools
+    
+    User->>UI: Interact with canvas
+    UI->>CK: Update state via useCoAgent
+    CK->>Agent: Send state + message
+    Agent->>Agent: Process with GPT-4o
+    Agent->>Tools: Execute tools
+    Tools-->>Agent: Return results
+    Agent->>CK: Return updated state
+    CK->>UI: Sync state changes
+    UI->>User: Display updates
+    
+    Note over Agent: Maintains ground truth
+    Note over UI,CK: Real-time bidirectional sync
+```
 
 ## Customization Guide
 
