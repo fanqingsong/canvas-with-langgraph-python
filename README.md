@@ -38,17 +38,9 @@ https://github.com/user-attachments/assets/2a4ec718-b83b-4968-9cbe-7c1fe082e958
 # Using pnpm (recommended)
 pnpm install
 
-# Using npm
-npm install
-
-# Using yarn
-yarn install
-
-# Using bun
-bun install
 ```
 
-> **Note:** Installing the package dependencies will also install the agent's python dependencies via the `install:agent` script.
+> **Note:** Installing the package dependencies will also install the agent's Python dependencies via the `install:agent` script.
 
 
 2. Set up your OpenAI API key:
@@ -61,14 +53,6 @@ echo 'OPENAI_API_KEY=your-openai-api-key-here' > agent/.env
 # Using pnpm
 pnpm dev
 
-# Using npm
-npm run dev
-
-# Using yarn
-yarn dev
-
-# Using bun
-bun run dev
 ```
 
 This will start both the UI and agent servers concurrently.
@@ -91,7 +75,7 @@ Once the application is running, you can:
    - "Create 3 projects with different priorities and add 2 checklist items to each"
    - The AI will create a plan and execute it step by step with visual progress
 
-4. **View JSON**: Toggle between visual canvas and JSON view using the button at the bottom
+4. **View JSON**: Toggle between the visual canvas and JSON view using the button at the bottom
 
 ## Available Scripts
 The following scripts can also be run using your preferred package manager:
@@ -145,7 +129,7 @@ graph TB
 
 ### Frontend (Next.js + CopilotKit)
 The main UI component is in [`src/app/page.tsx`](https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/src/app/page.tsx). It includes:
-- **Canvas Management**: Visual grid of cards with create, read, update, delete operations
+- **Canvas Management**: Visual grid of cards with create, read, update, and delete operations
 - **State Synchronization**: Uses `useCoAgent` hook for real-time state sync with the agent
 - **Frontend Actions**: Exposed as tools to the AI agent via `useCopilotAction`
 - **Plan Visualization**: Shows multi-step plan execution with progress indicators
