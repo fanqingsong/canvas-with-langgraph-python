@@ -101,13 +101,6 @@ def summarize_items_for_prompt(state: AgentState) -> str:
 
 
 @tool
-def get_weather(location: str):
-    """
-    Get the weather for a given location.
-    """
-    return f"The weather for {location} is 70 degrees."
-
-@tool
 def set_plan(steps: List[str]):
     """
     Initialize a plan consisting of step descriptions. Resets progress and sets status to 'in_progress'.
@@ -135,7 +128,6 @@ def complete_plan():
 #     return "Your tool response here."
 
 backend_tools = [
-    get_weather,
     set_plan,
     update_plan_progress,
     complete_plan,

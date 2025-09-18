@@ -138,7 +138,7 @@ The main UI component is in [`src/app/page.tsx`](https://github.com/CopilotKit/c
 ### Backend (LangGraph Agent)
 The agent logic is in [`agent/agent.py`](https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/agent/agent.py). It features:
 - **State Management**: Extends `CopilotKitState` with canvas-specific fields
-- **Tool Integration**: Backend tools for weather, planning, and frontend tools for canvas operations
+- **Tool Integration**: Backend tools for planning, and frontend tools for canvas operations
 - **Strict Grounding**: Enforces data consistency by always using shared state as truth
 - **Loop Control**: Prevents infinite loops and redundant operations
 - **Planning System**: Can create and execute multi-step plans with status tracking
