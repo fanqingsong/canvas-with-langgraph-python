@@ -4,7 +4,7 @@ This is a starter template for building AI-powered canvas applications using [La
 
 https://github.com/user-attachments/assets/2a4ec718-b83b-4968-9cbe-7c1fe082e958
 
-## Key Features
+## 🚀 Key Features
 
 - **Visual Canvas Interface**: Drag-free canvas displaying cards in a responsive grid layout
 - **Four Card Types**: 
@@ -29,7 +29,7 @@ https://github.com/user-attachments/assets/2a4ec718-b83b-4968-9cbe-7c1fe082e958
   - [bun](https://bun.sh/)
 - OpenAI API Key (for the LangGraph agent)
 
-> **Note:** This repository ignores lock files (package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lockb) to avoid conflicts between different package managers. Each developer should generate their own lock file using their preferred package manager. After that, make sure to delete it from the .gitignore.
+> **Note:** This repository ignores lock files (package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lock) to avoid conflicts between different package managers. Each developer should generate their own lock file using their preferred package manager. After that, make sure to delete it from the .gitignore.
 
 ## Getting Started
 
