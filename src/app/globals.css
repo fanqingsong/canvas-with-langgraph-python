@@ -37,7 +37,7 @@
   --sidebar-border: #e5e7eb; /* Sidebar border */
   --sidebar-ring: rgba(99, 102, 241, 0.5); /* Sidebar focus ring */
   --font-geist: "Geist", sans-serif;
-  --font-manrope: "Manrope", sans-serif;
+  --font-manrope: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 .dark {

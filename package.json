@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "next lint",
     "install:agent": "sh ./scripts/setup-agent.sh || scripts/setup-agent.bat",
-    "postinstall": "npm run install:agent"
+    "postinstall": "echo 'Skipping agent installation in Docker build'"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.24",

@@ -60,6 +60,8 @@ class AgentState(CopilotKitState):
     planSteps: List[Dict[str, Any]] = []
     currentStepIndex: int = -1
     planStatus: str = ""
+
+    
 def summarize_items_for_prompt(state: AgentState) -> str:
     try:
         items = state.get("items", []) or []
@@ -185,8 +187,33 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     https://www.perplexity.ai/search/react-agents-NcXLQhreS0WDzpVaS4m9Cg
     """
 
-    # 1. Define the model
-    model = ChatOpenAI(model="gpt-4o")
+    # 1. Define the model with support for Azure OpenAI
+    import os
+    
+    # 支持多种 LLM 提供商
+    if os.getenv("AZURE_OPENAI_API_KEY") and os.getenv("AZURE_OPENAI_ENDPOINT"):
+        # Azure OpenAI 配置
+        model = ChatOpenAI(
+            model=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o-mini"),
+            temperature=0.1,
+            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            base_url=f"{os.getenv('AZURE_OPENAI_ENDPOINT')}openai/deployments/{os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME', 'gpt-4o-mini')}/",
+            default_query={"api-version": os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-15-preview")}
+        )
+    elif os.getenv("OPENAI_API_KEY"):
+        # 标准 OpenAI API
+        model = ChatOpenAI(
+            model="gpt-4o",
+            temperature=0.1,
+            api_key=os.getenv("OPENAI_API_KEY")
+        )
+    else:
+        # 默认配置（如果没有配置任何 API Key）
+        model = ChatOpenAI(
+            model="gpt-4o",
+            temperature=0.1,
+            api_key="dummy-key"  # 将使用模拟响应
+        )
 
     # 2. Prepare and bind tools to the model (dedupe, allowlist, and cap)
     def _extract_tool_name(tool: Any) -> Optional[str]:
@@ -675,3 +702,7 @@ workflow.add_edge("tool_node", "chat_node")
 workflow.set_entry_point("chat_node")
 
 graph = workflow.compile()
+
+def create_agent():
+    """创建并返回配置好的 agent"""
+    return graph
