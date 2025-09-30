@@ -1,5 +1,5 @@
 services:
-  # 前端服务 (Next.js)
+  # 前端服务 (Next.js) - 开发模式
   frontend:
     build:
       context: ./frontend
@@ -18,10 +18,12 @@ services:
     restart: unless-stopped
     develop:
       watch:
-        - action: rebuild
+        - action: sync
           path: ./frontend/src
-        - action: rebuild
+          target: /app/src
+        - action: sync
           path: ./frontend/public
+          target: /app/public
         - action: rebuild
           path: ./frontend/package.json
         - action: rebuild
@@ -31,7 +33,7 @@ services:
         - action: rebuild
           path: ./frontend/tsconfig.json
 
-  # 后端服务 (Python LangGraph)
+  # 后端服务 (Python LangGraph) - 开发模式
   backend:
     build:
       context: ./backend
@@ -49,9 +51,6 @@ services:
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
       - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME:-gpt-4o-mini}
       - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
-    volumes:
-      - ./backend/agent:/app/agent
-      - /app/agent/.venv  # 排除虚拟环境目录
     networks:
       - app-network
     restart: unless-stopped
@@ -63,8 +62,9 @@ services:
       start_period: 40s
     develop:
       watch:
-        - action: rebuild
+        - action: sync
           path: ./backend/agent
+          target: /app/agent
         - action: rebuild
           path: ./backend/requirements.txt
         - action: rebuild

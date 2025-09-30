@@ -1,0 +1,85 @@
+# 使用华为云镜像加速 - 使用 Debian 基础镜像避免 musl libc 问题
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/node:20-slim AS base
+
+# 设置 npm 国内镜像源
+RUN npm config set registry https://registry.npmmirror.com
+
+# 安装依赖阶段
+FROM base AS deps
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+
+# 设置网络超时配置
+ENV NPM_CONFIG_FETCH_TIMEOUT 300000
+ENV NPM_CONFIG_FETCH_RETRY_MINTIMEOUT 20000
+ENV NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT 120000
+ENV NPM_CONFIG_FETCH_RETRIES 5
+# 禁用 SWC 自动下载
+ENV NEXT_SWC_DOWNLOAD_DISABLED 1
+ENV NEXT_SWC_DISABLE_DOWNLOAD 1
+# 设置 Node.js 网络超时
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+ENV UV_HTTP_TIMEOUT 300000
+
+# 复制 package.json、scripts 目录和 .npmrc 文件
+COPY package.json ./
+COPY scripts/ ./scripts/
+COPY .npmrc ./
+
+# 安装所有依赖，包括开发依赖（用于构建）
+RUN npm install --no-optional --legacy-peer-deps
+
+# 构建阶段
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/.npmrc ./
+COPY . .
+
+# 设置环境变量
+ENV NEXT_TELEMETRY_DISABLED 1
+# 禁用 SWC 自动下载，使用已安装的版本
+ENV NEXT_SWC_DOWNLOAD_DISABLED 1
+ENV NEXT_SWC_DISABLE_DOWNLOAD 1
+# 设置网络超时时间
+ENV NPM_CONFIG_FETCH_TIMEOUT 300000
+ENV NPM_CONFIG_FETCH_RETRY_MINTIMEOUT 20000
+ENV NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT 120000
+ENV NPM_CONFIG_FETCH_RETRIES 5
+# 设置 Node.js 网络超时
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+# 设置更长的超时时间
+ENV UV_HTTP_TIMEOUT 300000
+
+# 构建应用（TypeScript 已经在 deps 阶段安装了）
+# 手动安装 SWC 包以避免构建时下载超时
+RUN npm install @next/swc-linux-x64-gnu --no-save || echo "SWC package installation failed, continuing with build"
+RUN npm run build
+
+# 运行阶段
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV production
+ENV NEXT_TELEMETRY_DISABLED 1
+
+RUN groupadd --system --gid 1001 nodejs
+RUN useradd --system --uid 1001 nextjs
+
+# 复制构建产物
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT 3000
+ENV HOSTNAME "0.0.0.0"
+
+CMD ["node", "server.js"]

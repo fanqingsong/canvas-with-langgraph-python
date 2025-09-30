@@ -27,7 +27,6 @@ export default function RootLayout({
           runtimeUrl="/api/copilotkit"
           agent="sample_agent"
           showDevConsole={false}
-          publicApiKey={process.env.COPILOT_CLOUD_PUBLIC_API_KEY}
         >
           {children}
         </CopilotKit>

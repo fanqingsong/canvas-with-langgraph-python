@@ -46,7 +46,7 @@ check_env() {
 
 # 显示帮助信息
 show_help() {
-    echo "Canvas with LangGraph Python - 一键运行脚本"
+    echo "Canvas with LangGraph Python - 服务管理脚本"
     echo ""
     echo "用法: $0 [选项]"
     echo ""
@@ -60,6 +60,10 @@ show_help() {
     echo "  clean     清理容器和镜像"
     echo "  status    查看服务状态"
     echo "  help      显示此帮助信息"
+    echo ""
+    echo "其他启动脚本:"
+    echo "  ./start-prod.sh    # 生产环境启动"
+    echo "  ./start-dev.sh     # 开发环境启动（热加载）"
     echo ""
     echo "示例:"
     echo "  $0 start    # 启动服务"
@@ -133,9 +137,9 @@ quick_start() {
 
 # 停止服务
 stop_services() {
-    print_message "正在停止服务..." $YELLOW
-    docker compose down
-    print_message "✅ 服务已停止" $GREEN
+    print_message "正在停止服务并清理..." $YELLOW
+    docker compose down --remove-orphans
+    print_message "✅ 服务已停止并清理完成" $GREEN
 }
 
 # 重启服务

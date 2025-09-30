@@ -40,6 +40,7 @@ from langgraph.types import Command
 from copilotkit import CopilotKitState
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
+from langgraph.checkpoint.memory import MemorySaver
 
 class AgentState(CopilotKitState):
     """
@@ -701,7 +702,11 @@ workflow.add_node("tool_node", ToolNode(tools=backend_tools))
 workflow.add_edge("tool_node", "chat_node")
 workflow.set_entry_point("chat_node")
 
-graph = workflow.compile()
+# 创建内存检查点保存器
+memory = MemorySaver()
+
+# 编译工作流并添加检查点
+graph = workflow.compile(checkpointer=memory)
 
 def create_agent():
     """创建并返回配置好的 agent"""

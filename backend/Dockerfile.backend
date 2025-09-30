@@ -25,10 +25,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Node.js 和 npm
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
+# 后端不需要 Node.js，跳过安装
 
 # 复制 requirements.txt 并安装 Python 依赖
 COPY agent/requirements.txt .
@@ -60,10 +57,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Node.js 和 npm（运行时需要）
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
+# 后端不需要 Node.js，跳过安装
 
 # 从构建阶段复制 Python 依赖和代码
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
