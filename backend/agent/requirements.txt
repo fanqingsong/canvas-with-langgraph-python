@@ -9,3 +9,7 @@ langgraph-cli[inmem]>=0.3.5
 langchain-openai>=0.0.1
 copilotkit>=0.1.0,<0.2.0
 ag-ui-langgraph>=0.0.14,<0.1.0
+# 认证和权限相关依赖
+python-jose[cryptography]>=3.3.0,<4.0.0
+python-multipart>=0.0.9,<1.0.0
+email-validator>=2.0.0,<3.0.0

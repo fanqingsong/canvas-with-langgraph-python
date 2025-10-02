@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 
 import { GeistMono } from "geist/font/mono";
-import { CopilotKit } from "@copilotkit/react-core";
 import "./globals.css";
 import "@copilotkit/react-ui/styles.css";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthenticatedCopilotKit } from "@/components/AuthenticatedCopilotKit";
 
 // 使用系统字体替代 Google Fonts，避免构建时网络问题
 const manrope = {
@@ -23,13 +24,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${manrope.variable} ${GeistMono.variable}`}>
       <body className="subpixel-antialiased">
-        <CopilotKit
-          runtimeUrl="/api/copilotkit"
-          agent="sample_agent"
-          showDevConsole={false}
-        >
-          {children}
-        </CopilotKit>
+        <AuthProvider>
+          <AuthenticatedCopilotKit>
+            {children}
+          </AuthenticatedCopilotKit>
+        </AuthProvider>
       </body>
     </html>
   );

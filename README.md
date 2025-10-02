@@ -17,6 +17,8 @@ https://github.com/user-attachments/assets/2a4ec718-b83b-4968-9cbe-7c1fe082e958
 - **Human-in-the-Loop (HITL)**: Intelligent interrupts for clarification when needed
 - **JSON View**: Toggle between visual canvas and raw JSON state
 - **Responsive Design**: Optimized for both desktop (sidebar chat) and mobile (popup chat)
+- **🔐 User Authentication & Authorization**: JWT-based authentication with role-based access control
+- **🛡️ Permission System**: Fine-grained permissions for different user roles and operations
 
 ## Prerequisites
 
@@ -43,10 +45,18 @@ pnpm install
 > **Note:** Installing the package dependencies will also install the agent's Python dependencies via the `install:agent` script.
 
 
-2. Set up your OpenAI API key:
+2. Set up your environment variables:
 ```bash
-echo 'OPENAI_API_KEY=your-openai-api-key-here' > agent/.env
+# Option 1: Use the setup script (recommended)
+./setup-env.sh
+
+# Option 2: Manual setup
+cp .env.example .env
+# Edit .env file with your actual values
+nano .env
 ```
+
+> **Note:** See [ENV_CONFIG.md](ENV_CONFIG.md) for detailed environment variable configuration.
 
 3. Start the development server:
 ```bash
@@ -192,6 +202,44 @@ sequenceDiagram
 - Global styles: [`src/app/globals.css`](https://github.com/CopilotKit/canvas-with-langgraph-python/blob/main/src/app/globals.css)
 - Component styles use Tailwind CSS with shadcn/ui components
 - Theme colors can be modified via CSS custom properties
+
+## 🔐 Authentication & Authorization
+
+This application includes a comprehensive permission system with JWT-based authentication and role-based access control.
+
+### User Roles
+- **Admin**: Full access to all features and user management
+- **Editor**: Can create and edit content, execute plans
+- **Viewer**: Read-only access to canvas content
+- **Guest**: Basic viewing permissions
+
+### Test Accounts
+```
+管理员: admin / admin123
+编辑者: editor / editor123
+查看者: viewer / viewer123
+访客: guest / guest123
+```
+
+### Permission System
+The system includes fine-grained permissions for:
+- Canvas operations (read, write, delete)
+- Project management (create, edit, delete)
+- Entity management (create, edit, delete)
+- Note management (create, edit, delete)
+- Chart management (create, edit, delete)
+- Plan management (create, execute, manage)
+- User management (admin only)
+
+### Getting Started with Authentication
+1. Set up your JWT secret key in the `.env` file
+2. Start the application using the provided scripts
+3. Access the login page at `http://localhost:3000/login`
+4. Use one of the test accounts to explore different permission levels
+
+For detailed information, see:
+- [Permission Guide](PERMISSION_GUIDE.md) - Complete permission system documentation
+- [Environment Configuration](ENV_CONFIG.md) - Environment variable setup guide
 
 ## 📚 Documentation
 

@@ -70,5 +70,5 @@ WORKDIR /app/agent
 # 暴露端口
 EXPOSE 8123
 
-# 启动命令 - 使用 Python 直接运行
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8123"]
+# 启动命令 - 使用 Python 直接运行，启用热加载
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8123", "--reload"]

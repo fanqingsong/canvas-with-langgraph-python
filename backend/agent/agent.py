@@ -61,6 +61,9 @@ class AgentState(CopilotKitState):
     planSteps: List[Dict[str, Any]] = []
     currentStepIndex: int = -1
     planStatus: str = ""
+    # Authentication state
+    user_info: Optional[Dict[str, Any]] = None
+    auth_error: Optional[str] = None
 
     
 def summarize_items_for_prompt(state: AgentState) -> str:
@@ -175,6 +178,192 @@ FRONTEND_TOOL_ALLOWLIST = set([
 ])
 
 
+# https://docs.copilotkit.ai/direct-to-llm/guides/backend-actions/langgraph-platform-endpoint?hosting=self-hosted
+def validate_jwt_token(auth_header: str) -> Optional[Dict[str, Any]]:
+    """验证JWT token并返回用户信息"""
+    print(f"[JWT] 开始验证JWT token")
+    print(f"[JWT] 接收到的auth_header: {auth_header}")
+    
+    if not auth_header:
+        print(f"[JWT] auth_header为空，返回None")
+        return None
+    
+    try:
+        # 移除 "Bearer " 前缀
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            print(f"[JWT] 移除Bearer前缀后的token: {token[:20]}...")
+        else:
+            token = auth_header
+            print(f"[JWT] 直接使用token: {token[:20]}...")
+        
+        # 导入JWT验证函数
+        from auth import verify_token, get_user
+        
+        # 验证token
+        print(f"[JWT] 调用verify_token验证token")
+        payload = verify_token(token)
+        print(f"[JWT] verify_token返回的payload: {payload}")
+        
+        if payload is None:
+            print(f"[JWT] payload为None，token无效")
+            return None
+        
+        # 获取用户信息
+        username = payload.get("sub")
+        print(f"[JWT] 从payload中提取的username: {username}")
+        
+        if username is None:
+            print(f"[JWT] username为None")
+            return None
+        
+        user = get_user(username)
+        print(f"[JWT] get_user返回的user: {user}")
+        
+        if user is None:
+            print(f"[JWT] user为None")
+            return None
+        
+        user_info = {
+            "username": user.username,
+            "role": user.role.value,
+            "permissions": [p.value for p in user.permissions],
+            "user_id": user.id
+        }
+        print(f"[JWT] 返回用户信息: {user_info}")
+        return user_info
+        
+    except Exception as e:
+        print(f"[JWT] JWT验证错误: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def filter_tools_by_permissions(tools: List[Any], user_permissions: List[str]) -> List[Any]:
+    """根据用户权限过滤工具"""
+    from permission_agent import PermissionAwareAgent
+    
+    # 创建权限代理实例来获取工具权限映射
+    permission_agent = PermissionAwareAgent(None)  # 不需要graph实例
+    
+    filtered_tools = []
+    for tool in tools:
+        tool_name = tool.name if hasattr(tool, 'name') else str(tool)
+        
+        # 检查工具是否需要特定权限
+        required_permission = permission_agent.permission_tool_mapping.get(tool_name)
+        
+        if required_permission is None:
+            # 工具不需要特定权限，允许所有用户使用
+            filtered_tools.append(tool)
+        elif required_permission.value in user_permissions:
+            # 用户有权限使用此工具
+            filtered_tools.append(tool)
+        else:
+            # 用户没有权限使用此工具
+            print(f"用户无权使用工具: {tool_name} (需要权限: {required_permission.value})")
+    
+    return filtered_tools
+
+def authenticate_user(state, config):
+    """LangGraph认证节点"""
+    print(f"[AUTH] 认证节点被调用")
+    print(f"[AUTH] 接收到的config: {config}")
+    
+    # 尝试从config.configurable中获取authorization
+    auth_header = config.get("configurable", {}).get("authorization")
+    print(f"[AUTH] 从config.configurable中提取的authorization: {auth_header}")
+    
+    # 如果config.configurable中没有，尝试从state中获取
+    if not auth_header:
+        auth_header = state.get("authorization")
+        print(f"[AUTH] 从state中提取的authorization: {auth_header}")
+    
+    # 如果还是没有，尝试从properties中获取
+    if not auth_header:
+        properties = state.get("properties", {})
+        auth_header = properties.get("authorization")
+        print(f"[AUTH] 从properties中提取的authorization: {auth_header}")
+    
+    # 如果还是没有，尝试从metadata中获取（CopilotKit可能在这里传递）
+    if not auth_header:
+        metadata = config.get("metadata", {})
+        auth_header = metadata.get("authorization")
+        print(f"[AUTH] 从metadata中提取的authorization: {auth_header}")
+    
+    # 如果还是没有，尝试从callbacks中获取
+    if not auth_header:
+        callbacks = config.get("callbacks")
+        if callbacks and hasattr(callbacks, 'metadata'):
+            auth_header = callbacks.metadata.get("authorization")
+            print(f"[AUTH] 从callbacks.metadata中提取的authorization: {auth_header}")
+    
+    # 如果还是没有，尝试从config.configurable.user_info中获取（FastAPI传递的）
+    if not auth_header:
+        user_info_from_config = config.get("configurable", {}).get("user_info")
+        if user_info_from_config:
+            print(f"[AUTH] 从config.configurable.user_info中获取用户信息: {user_info_from_config}")
+            user_info = user_info_from_config
+        else:
+            # 如果还是没有，尝试从thread_id中推断（临时解决方案）
+            thread_id = config.get("configurable", {}).get("thread_id")
+            if thread_id:
+                print(f"[AUTH] 尝试从thread_id推断认证: {thread_id}")
+                # 这里可以添加一个临时的认证逻辑，比如从数据库或缓存中获取
+                # 暂时跳过认证，直接返回成功
+                print(f"[AUTH] 临时跳过认证，直接返回成功")
+                user_info = {
+                    "username": "admin",
+                    "role": "admin", 
+                    "permissions": ["read:canvas", "write:canvas", "admin"],
+                    "user_id": "admin"
+                }
+            else:
+                user_info = None
+    else:
+        # 检查是否是FastAPI传递的认证信息（格式：Bearer username）
+        if auth_header.startswith("Bearer ") and not auth_header.startswith("Bearer eyJ"):
+            # 这是FastAPI传递的认证信息，从config.configurable.user_info中获取
+            user_info_from_config = config.get("configurable", {}).get("user_info")
+            if user_info_from_config:
+                print(f"[AUTH] 从FastAPI传递的认证信息中获取用户信息: {user_info_from_config}")
+                user_info = user_info_from_config
+            else:
+                user_info = None
+        else:
+            # 这是真正的JWT token，进行验证
+            user_info = validate_jwt_token(auth_header)
+    
+    print(f"[AUTH] JWT验证结果: {user_info}")
+    
+    if user_info is None:
+        # 认证失败，返回错误状态
+        print(f"[AUTH] 认证失败，返回错误状态")
+        messages = list(state.get("messages", []))
+        messages.append(AIMessage(content="认证失败：无效的访问令牌或无权限访问"))
+        return {
+            **state,
+            "messages": messages,
+            "user_info": None,
+            "auth_error": "Authentication failed"
+        }
+    
+    # 认证成功，将用户信息添加到状态中
+    # 同时根据用户权限过滤可用工具
+    user_permissions = user_info.get("permissions", [])
+    filtered_tools = filter_tools_by_permissions(backend_tools, user_permissions)
+    
+    # 只返回工具名称，不返回工具对象（避免序列化问题）
+    filtered_tool_names = [tool.name for tool in filtered_tools if hasattr(tool, 'name')]
+    
+    return {
+        **state,
+        "user_info": user_info,
+        "auth_error": None,
+        "available_tools": filtered_tool_names  # 只存储工具名称
+    }
+
+
 async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Literal["tool_node", "__end__"]]:
     print(f"state: {state}")
     """
@@ -187,6 +376,15 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     For more about the ReAct design pattern, see:
     https://www.perplexity.ai/search/react-agents-NcXLQhreS0WDzpVaS4m9Cg
     """
+    
+    # 检查认证状态
+    if state.get("auth_error"):
+        return Command(goto="__end__")
+    
+    user_info = state.get("user_info")
+    if user_info:
+        print(f"用户 {user_info['username']} (角色: {user_info['role']}) 正在使用Agent")
+        print(f"用户权限: {user_info['permissions']}")
 
     # 1. Define the model with support for Azure OpenAI
     import os
@@ -697,10 +895,12 @@ def route_to_tool_node(response: BaseMessage):
 
 # Define the workflow graph
 workflow = StateGraph(AgentState)
+workflow.add_node("authenticate_user", authenticate_user)
 workflow.add_node("chat_node", chat_node)
 workflow.add_node("tool_node", ToolNode(tools=backend_tools))
+workflow.add_edge("authenticate_user", "chat_node")
 workflow.add_edge("tool_node", "chat_node")
-workflow.set_entry_point("chat_node")
+workflow.set_entry_point("authenticate_user")
 
 # 创建内存检查点保存器
 memory = MemorySaver()

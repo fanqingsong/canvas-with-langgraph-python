@@ -7,7 +7,7 @@ import type React from "react";
 import { Button } from "@/components/ui/button"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import AppChatHeader, { PopupHeader } from "@/components/canvas/AppChatHeader";
-import { X, Check, Loader2 } from "lucide-react"
+import { X, Check, Loader2, User, LogOut, Shield } from "lucide-react"
 import CardRenderer from "@/components/canvas/CardRenderer";
 import ShikiHighlighter from "react-shiki/web";
 import { motion, useScroll, useTransform, useMotionValueEvent } from "motion/react";
@@ -19,8 +19,16 @@ import { projectAddField4Item, projectSetField4ItemText, projectSetField4ItemDon
 import useMediaQuery from "@/hooks/use-media-query";
 import ItemHeader from "@/components/canvas/ItemHeader";
 import NewItemMenu from "@/components/canvas/NewItemMenu";
+import { useAuth } from "@/contexts/AuthContext";
+import { PERMISSIONS } from "@/lib/auth";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 
-export default function CopilotKitPage() {
+// 将Hooks移到一个单独的组件中
+function CopilotKitPageContent() {
+  const { user, isAuthenticated, isLoading, logout, checkPermission } = useAuth();
+  
+  // 所有Hooks必须在条件性返回之前调用
   const { state, setState } = useCoAgent<AgentState>({
     name: "sample_agent",
     initialState,
@@ -39,9 +47,6 @@ export default function CopilotKitPage() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const [showJsonView, setShowJsonView] = useState<boolean>(false);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
-  const { scrollY } = useScroll({ container: scrollAreaRef });
-  const headerScrollThreshold = 64;
-  const headerOpacity = useTransform(scrollY, [0, headerScrollThreshold], [1, 0]);
   const [headerDisabled, setHeaderDisabled] = useState<boolean>(false);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const descTextareaRef = useRef<HTMLInputElement | null>(null);
@@ -64,14 +69,6 @@ export default function CopilotKitPage() {
     prevPlanStatusRef.current = status;
   }, [viewState?.planStatus]);
 
-  useMotionValueEvent(scrollY, "change", (y) => {
-    const disable = y >= headerScrollThreshold;
-    setHeaderDisabled(disable);
-    if (disable) {
-      titleInputRef.current?.blur();
-      descTextareaRef.current?.blur();
-    }
-  });
 
   useEffect(() => {
     console.log("[CoAgent state updated]", state);
@@ -150,8 +147,6 @@ export default function CopilotKitPage() {
     };
   };
 
-
-
   // Strengthen grounding: always prefer shared state over chat history
   useCopilotAdditionalInstructions({
     instructions: (() => {
@@ -203,6 +198,34 @@ export default function CopilotKitPage() {
       ].join("\n");
     })(),
   });
+
+  // 初始化滚动相关的Hooks（使用安全的默认值）
+  const [scrollY, setScrollY] = useState(0);
+  const headerScrollThreshold = 64;
+  const headerOpacity = Math.max(0, 1 - scrollY / headerScrollThreshold);
+
+  // 使用useEffect处理滚动，避免在条件性返回后调用Hooks
+  useEffect(() => {
+    if (!scrollAreaRef.current) return;
+
+    const handleScroll = () => {
+      const y = scrollAreaRef.current?.scrollTop || 0;
+      setScrollY(y);
+      const disable = y >= headerScrollThreshold;
+      setHeaderDisabled(disable);
+      if (disable) {
+        titleInputRef.current?.blur();
+        descTextareaRef.current?.blur();
+      }
+    };
+
+    const element = scrollAreaRef.current;
+    element.addEventListener('scroll', handleScroll);
+    
+    return () => {
+      element.removeEventListener('scroll', handleScroll);
+    };
+  }, [headerScrollThreshold]);
 
   // HITL: dropdown selector for item choice using LangGraph interrupt
   useLangGraphInterrupt({
@@ -971,6 +994,24 @@ export default function CopilotKitPage() {
     },
   });
 
+  // 如果正在加载认证状态，显示加载界面
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex items-center space-x-2">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>加载中...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 如果未认证，重定向到登录页面
+  if (!isAuthenticated) {
+    window.location.href = '/login';
+    return null;
+  }
+
   const titleClasses = cn(
     /* base styles */
     "w-full outline-none rounded-md px-2 py-1",
@@ -988,6 +1029,46 @@ export default function CopilotKitPage() {
       style={{ "--copilot-kit-primary-color": "#2563eb" } as CopilotKitCSSProperties}
       className="h-screen flex flex-col"
     >
+      {/* User Info Header */}
+      <div className="bg-background border-b px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <Shield className="h-5 w-5 text-muted-foreground" />
+          <span className="text-sm font-medium">Canvas with LangGraph</span>
+        </div>
+        <div className="flex items-center space-x-4">
+          <Badge variant="outline" className="text-xs">
+            {user?.role?.toUpperCase()}
+          </Badge>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="flex items-center space-x-2">
+                <User className="h-4 w-4" />
+                <span className="text-sm">{user?.username}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>我的账户</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled>
+                <User className="mr-2 h-4 w-4" />
+                <span className="text-sm text-muted-foreground">{user?.email}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled>
+                <Shield className="mr-2 h-4 w-4" />
+                <span className="text-sm text-muted-foreground">
+                  {user?.permissions?.length || 0} 个权限
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={logout} className="text-red-600">
+                <LogOut className="mr-2 h-4 w-4" />
+                退出登录
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Chat Sidebar */}
@@ -1249,5 +1330,10 @@ export default function CopilotKitPage() {
       </div>
     </div>
   );
+}
+
+// 主组件，处理认证逻辑
+export default function CopilotKitPage() {
+  return <CopilotKitPageContent />;
 }
 

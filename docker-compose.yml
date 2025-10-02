@@ -49,6 +49,8 @@ services:
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
       - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME:-gpt-4o-mini}
       - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
+      # JWT 认证配置
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your_jwt_secret_key_change_in_production_minimum_32_characters}
     volumes:
       - ./backend/agent:/app/agent
       - /app/agent/.venv  # 排除虚拟环境目录

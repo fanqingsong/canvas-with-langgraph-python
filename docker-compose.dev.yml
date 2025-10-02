@@ -3,16 +3,20 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile.frontend
+      dockerfile: Dockerfile.dev
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_AGENT_URL=http://backend:8123
+      - NEXT_PUBLIC_AGENT_URL=http://localhost:8123
       - LANGGRAPH_URL=http://backend:8123
       - COPILOT_CLOUD_PUBLIC_API_KEY=${COPILOT_CLOUD_PUBLIC_API_KEY:-}
     depends_on:
       - backend
+    volumes:
+      - ./frontend:/app
+      - node_modules:/app/node_modules
+      - next_cache:/app/.next
     networks:
       - app-network
     restart: unless-stopped
@@ -40,6 +44,9 @@ services:
       dockerfile: Dockerfile.backend
     ports:
       - "8123:8123"
+    volumes:
+      # 直接挂载源代码目录，实现真正的热加载
+      - ./backend/agent:/app/agent
     environment:
       - PYTHONPATH=/app/agent
       - LANGCHAIN_TRACING_V2=true
@@ -51,6 +58,8 @@ services:
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
       - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME:-gpt-4o-mini}
       - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
+      # JWT 认证配置
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-dev-jwt-secret-key-change-in-production-minimum-32-characters}
     networks:
       - app-network
     restart: unless-stopped
@@ -65,6 +74,10 @@ services:
         - action: sync
           path: ./backend/agent
           target: /app/agent
+          ignore:
+            - "**/__pycache__/**"
+            - "**/*.pyc"
+            - "**/.git/**"
         - action: rebuild
           path: ./backend/requirements.txt
         - action: rebuild
@@ -76,4 +89,5 @@ networks:
 
 volumes:
   node_modules:
+  next_cache:
   python_cache:
